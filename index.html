@@ -3,228 +3,638 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NTI Demand Summary Dashboard</title>
+<title>NTI Demand Portal</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 :root {
-  --bg: #f6f7f9; --surface: #ffffff; --surface-muted: #f1f2f4; --surface-raised: #ffffff;
-  --text-primary: #1a1a1a; --text-secondary: #4a4a4a; --text-tertiary: #6b7280; --text-quaternary: #9ca3af;
-  --border: #e5e7eb; --border-strong: #d1d5db; --accent: #2563eb; --accent-soft: #dbeafe;
-  --danger: #dc2626; --danger-soft: #fee2e2; --positive: #16a34a; --positive-soft: #dcfce7;
-  --warning: #d97706; --warning-soft: #fef3c7;
-  --radius-sm: 6px; --radius-md: 10px; --radius-lg: 12px;
-  --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
-  --shadow-lg: 0 4px 12px rgba(0,0,0,0.08);
+  --sidebar-bg: #1a1d29;
+  --sidebar-width: 240px;
+  --sidebar-collapsed: 64px;
+  --primary: #2563eb;
+  --primary-soft: #eff6ff;
+  --success: #10b981;
+  --success-soft: #ecfdf5;
+  --danger: #ef4444;
+  --danger-soft: #fef2f2;
+  --warning: #f59e0b;
+  --warning-soft: #fffbeb;
+  --bg: #f3f4f6;
+  --surface: #ffffff;
+  --surface-hover: #f9fafb;
+  --border: #e5e7eb;
+  --border-light: #f3f4f6;
+  --text: #111827;
+  --text-secondary: #6b7280;
+  --text-muted: #9ca3af;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --shadow: 0 1px 3px rgba(0,0,0,0.05), 0 1px 2px rgba(0,0,0,0.03);
+  --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03);
+  --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.08), 0 4px 6px -2px rgba(0,0,0,0.04);
 }
 * { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  background: var(--bg); color: var(--text-primary); line-height: 1.5;
-  padding: 24px 16px; max-width: 1200px; margin: 0 auto;
+  background: var(--bg); color: var(--text); line-height: 1.5;
 }
-h1 { font-size: 22px; font-weight: 600; margin-bottom: 4px; }
-.subtitle { font-size: 14px; color: var(--text-tertiary); margin-bottom: 24px; }
+
+/* Layout */
+.app { display: flex; min-height: 100vh; }
+.sidebar {
+  width: var(--sidebar-width); background: var(--sidebar-bg); color: #fff;
+  display: flex; flex-direction: column; position: fixed; height: 100vh; z-index: 50;
+  transition: width .3s ease;
+}
+.sidebar-header {
+  padding: 20px 24px; border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.sidebar-logo {
+  font-size: 18px; font-weight: 700; letter-spacing: -0.3px;
+  display: flex; align-items: center; gap: 10px;
+}
+.sidebar-logo svg { flex-shrink: 0; }
+.sidebar-sub { font-size: 11px; color: rgba(255,255,255,0.5); margin-top: 2px; margin-left: 34px; }
+.nav { flex: 1; padding: 12px 0; overflow-y: auto; }
+.nav-item {
+  display: flex; align-items: center; gap: 14px;
+  padding: 12px 24px; color: rgba(255,255,255,0.65);
+  font-size: 14px; font-weight: 500; cursor: pointer;
+  transition: all .15s; border-left: 3px solid transparent;
+  text-decoration: none;
+}
+.nav-item:hover { color: #fff; background: rgba(255,255,255,0.05); }
+.nav-item.active { color: #fff; background: rgba(255,255,255,0.08); border-left-color: var(--primary); }
+.nav-item svg { flex-shrink: 0; opacity: .7; }
+.nav-item.active svg { opacity: 1; }
+.nav-section {
+  padding: 16px 24px 8px; font-size: 10px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 1px; color: rgba(255,255,255,0.35);
+}
+.sidebar-footer {
+  padding: 16px 24px; border-top: 1px solid rgba(255,255,255,0.08);
+  font-size: 12px; color: rgba(255,255,255,0.4);
+}
+
+.main { flex: 1; margin-left: var(--sidebar-width); min-height: 100vh; }
+.topbar {
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  padding: 14px 28px; display: flex; align-items: center; justify-content: space-between;
+  position: sticky; top: 0; z-index: 40;
+}
+.topbar-left { display: flex; align-items: center; gap: 12px; }
+.topbar-title { font-size: 18px; font-weight: 600; }
+.topbar-breadcrumb { font-size: 13px; color: var(--text-muted); }
+.topbar-right { display: flex; align-items: center; gap: 16px; }
+.user-pill {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 14px; background: var(--bg); border-radius: 100px;
+  font-size: 13px; font-weight: 500;
+}
+.user-avatar {
+  width: 28px; height: 28px; border-radius: 50%;
+  background: var(--primary); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 600;
+}
+.badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 10px; border-radius: 100px; font-size: 11px; font-weight: 600;
+}
+.badge-admin { background: var(--primary-soft); color: var(--primary); }
+.badge-user { background: var(--border-light); color: var(--text-secondary); }
+
+.content { padding: 24px 28px; }
+
+/* Cards */
 .card {
-  background: var(--surface); border-radius: var(--radius-lg); box-shadow: var(--shadow);
-  padding: 20px; margin-bottom: 16px; border: 1px solid var(--border);
+  background: var(--surface); border-radius: var(--radius);
+  box-shadow: var(--shadow); border: 1px solid var(--border-light);
+  margin-bottom: 20px; overflow: hidden;
 }
-.card-title {
-  font-size: 15px; font-weight: 600; color: var(--text-primary); margin-bottom: 16px;
-  display: flex; align-items: center; gap: 8px;
+.card-header {
+  padding: 18px 24px; border-bottom: 1px solid var(--border-light);
+  display: flex; align-items: center; justify-content: space-between;
 }
-label { display: block; font-size: 13px; font-weight: 500; color: var(--text-secondary); margin-bottom: 6px; }
-select, input[type="text"] {
-  width: 100%; padding: 10px 12px; border: 1px solid var(--border-strong);
-  border-radius: var(--radius-md); background: var(--surface); color: var(--text-primary);
+.card-title { font-size: 15px; font-weight: 600; }
+.card-body { padding: 24px; }
+
+/* Stats */
+.stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+.stat-card {
+  background: var(--surface); border-radius: var(--radius);
+  padding: 20px 24px; box-shadow: var(--shadow); border: 1px solid var(--border-light);
+  display: flex; flex-direction: column; gap: 6px;
+}
+.stat-card .stat-label { font-size: 12px; color: var(--text-secondary); font-weight: 500; text-transform: uppercase; letter-spacing: .4px; }
+.stat-card .stat-value { font-size: 32px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; letter-spacing: -0.5px; }
+.stat-card .stat-delta { font-size: 12px; font-weight: 500; }
+.stat-card .stat-delta.up { color: var(--success); }
+.stat-card .stat-delta.down { color: var(--danger); }
+
+/* Upload */
+.upload-zone {
+  border: 2px dashed var(--border); border-radius: var(--radius);
+  padding: 48px 24px; text-align: center; cursor: pointer;
+  transition: all .2s; background: var(--surface-hover);
+}
+.upload-zone:hover, .upload-zone.dragover {
+  border-color: var(--primary); background: var(--primary-soft);
+}
+.upload-zone-icon { width: 48px; height: 48px; margin: 0 auto 14px; color: var(--text-muted); }
+.upload-zone:hover .upload-zone-icon, .upload-zone.dragover .upload-zone-icon { color: var(--primary); }
+.upload-zone-title { font-size: 16px; font-weight: 600; color: var(--text); }
+.upload-zone-hint { font-size: 13px; color: var(--text-secondary); margin-top: 4px; }
+
+/* Steps */
+.steps { display: flex; align-items: center; gap: 8px; margin-bottom: 24px; }
+.step {
+  display: flex; align-items: center; gap: 8px; padding: 8px 14px;
+  border-radius: var(--radius-sm); font-size: 13px; font-weight: 500;
+  color: var(--text-muted); background: var(--bg);
+}
+.step.active { background: var(--primary); color: #fff; }
+.step.done { background: var(--success-soft); color: var(--success); }
+.step-num {
+  width: 22px; height: 22px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700; background: rgba(0,0,0,0.08);
+}
+.step.active .step-num { background: rgba(255,255,255,0.2); }
+.step.done .step-num { background: var(--success); color: #fff; }
+
+/* Forms */
+.form-group { margin-bottom: 16px; }
+.form-label { display: block; font-size: 13px; font-weight: 500; color: var(--text-secondary); margin-bottom: 6px; }
+.form-control {
+  width: 100%; padding: 10px 14px; border: 1px solid var(--border);
+  border-radius: var(--radius-sm); background: var(--surface); color: var(--text);
   font-size: 14px; outline: none; transition: border-color .15s;
 }
-select:focus, input:focus { border-color: var(--accent); }
-.dropzone {
-  border: 2px dashed var(--border-strong); border-radius: var(--radius-lg);
-  padding: 40px 20px; text-align: center; cursor: pointer; transition: all .2s; background: var(--surface-muted);
-}
-.dropzone:hover, .dropzone.dragover { border-color: var(--accent); background: var(--accent-soft); }
-.dropzone-icon { width: 40px; height: 40px; margin: 0 auto 10px; color: var(--text-quaternary); }
-.dropzone:hover .dropzone-icon, .dropzone.dragover .dropzone-icon { color: var(--accent); }
-.dropzone-title { font-size: 15px; font-weight: 500; color: var(--text-secondary); }
-.dropzone-hint { font-size: 12px; color: var(--text-quaternary); margin-top: 4px; }
+.form-control:focus { border-color: var(--primary); }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+/* Buttons */
 .btn {
-  display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px;
-  border-radius: var(--radius-md); font-size: 14px; font-weight: 500; cursor: pointer;
-  border: none; transition: all .15s; text-decoration: none;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 10px 20px; border-radius: var(--radius-sm); font-size: 14px;
+  font-weight: 600; cursor: pointer; border: none; transition: all .15s;
 }
-.btn-primary { background: var(--text-primary); color: #fff; }
-.btn-primary:hover { opacity: .9; }
-.btn-secondary { background: var(--surface-muted); color: var(--text-primary); border: 1px solid var(--border); }
-.btn-secondary:hover { background: var(--border); }
+.btn-primary { background: var(--primary); color: #fff; }
+.btn-primary:hover { background: #1d4ed8; }
+.btn-secondary { background: var(--bg); color: var(--text); border: 1px solid var(--border); }
+.btn-secondary:hover { background: var(--border-light); }
 .btn-danger { background: var(--danger-soft); color: var(--danger); }
-.btn-danger:hover { background: #fecaca; }
-.btn-sm { padding: 5px 10px; font-size: 12px; }
-.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px; }
-.stat-box { background: var(--surface-muted); border-radius: var(--radius-md); padding: 16px; text-align: center; border: 1px solid var(--border); }
-.stat-label { font-size: 12px; color: var(--text-tertiary); margin-bottom: 4px; text-transform: uppercase; letter-spacing: .3px; }
-.stat-value { font-size: 28px; font-weight: 600; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.btn-danger:hover { background: #fee2e2; }
+.btn-success { background: var(--success); color: #fff; }
+.btn-success:hover { background: #059669; }
+.btn-sm { padding: 6px 12px; font-size: 13px; }
+.btn-block { width: 100%; }
+
+/* Tables */
+.table-wrap { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; font-size: 13px; }
-th { text-align: left; padding: 10px 12px; font-weight: 500; color: var(--text-tertiary); font-size: 12px; text-transform: uppercase; letter-spacing: .3px; background: var(--surface-muted); border-bottom: 1px solid var(--border); }
-td { padding: 10px 12px; border-bottom: 1px solid var(--border); color: var(--text-secondary); }
-tr:hover td { background: var(--surface-muted); }
-.text-right { text-align: right; } .text-center { text-align: center; }
-.mono { font-family: "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas, monospace; font-size: 12px; }
-.alert { padding: 12px 16px; border-radius: var(--radius-md); font-size: 13px; margin-bottom: 16px; display: none; }
-.alert-error { background: var(--danger-soft); color: var(--danger); border: 1px solid #fecaca; }
-.alert-warning { background: var(--warning-soft); color: var(--warning); border: 1px solid #fde68a; }
-.alert-success { background: var(--positive-soft); color: var(--positive); border: 1px solid #bbf7d0; }
-.tabs { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 1px solid var(--border); }
-.tab { padding: 10px 16px; font-size: 14px; font-weight: 500; color: var(--text-tertiary); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; background: none; border: none; }
-.tab.active { color: var(--text-primary); border-bottom-color: var(--text-primary); }
-.tab:hover { color: var(--text-secondary); }
-.history-item { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border: 1px solid var(--border); border-radius: var(--radius-md); margin-bottom: 8px; background: var(--surface); transition: box-shadow .15s; }
-.history-item:hover { box-shadow: var(--shadow-lg); }
-.history-meta { display: flex; flex-direction: column; gap: 2px; }
-.history-store { font-size: 14px; font-weight: 500; color: var(--text-primary); }
-.history-date { font-size: 12px; color: var(--text-tertiary); }
-.history-stats { display: flex; gap: 16px; align-items: center; }
+thead th {
+  text-align: left; padding: 12px 16px; font-weight: 600; font-size: 11px;
+  text-transform: uppercase; letter-spacing: .5px; color: var(--text-secondary);
+  background: var(--bg); border-bottom: 1px solid var(--border);
+}
+tbody td { padding: 12px 16px; border-bottom: 1px solid var(--border-light); color: var(--text-secondary); }
+tbody tr:hover td { background: var(--surface-hover); }
+tbody tr:last-child td { border-bottom: none; }
+.text-right { text-align: right; }
+.text-center { text-align: center; }
+.mono { font-family: "SF Mono", ui-monospace, monospace; font-size: 12px; }
+
+/* Login */
+.login-bg {
+  min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, #1a1d29 0%, #2d3748 100%);
+}
+.login-card {
+  background: var(--surface); border-radius: var(--radius);
+  box-shadow: var(--shadow-lg); width: 100%; max-width: 420px; padding: 40px;
+}
+.login-logo { text-align: center; margin-bottom: 28px; }
+.login-logo h2 { font-size: 22px; font-weight: 700; color: var(--text); }
+.login-logo p { font-size: 14px; color: var(--text-secondary); margin-top: 4px; }
+
+/* History */
+.history-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 18px; border: 1px solid var(--border-light); border-radius: var(--radius-sm);
+  margin-bottom: 10px; background: var(--surface); transition: box-shadow .15s;
+}
+.history-row:hover { box-shadow: var(--shadow-md); }
+.history-info { display: flex; flex-direction: column; gap: 2px; }
+.history-title { font-size: 14px; font-weight: 600; color: var(--text); }
+.history-meta { font-size: 12px; color: var(--text-muted); }
+.history-stats { display: flex; gap: 20px; }
 .history-stat { text-align: center; }
-.history-stat-label { font-size: 11px; color: var(--text-quaternary); }
-.history-stat-value { font-size: 14px; font-weight: 600; color: var(--text-primary); font-variant-numeric: tabular-nums; }
-.history-actions { display: flex; gap: 6px; }
-.compare-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-.compare-col { background: var(--surface-muted); border-radius: var(--radius-md); padding: 16px; border: 1px solid var(--border); }
-.compare-header { font-size: 14px; font-weight: 600; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
-.compare-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; }
-.compare-diff { font-weight: 600; }
-.compare-diff.positive { color: var(--positive); }
-.compare-diff.negative { color: var(--danger); }
+.history-stat-val { font-size: 15px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; }
+.history-stat-lbl { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: .5px; }
+
+/* Compare */
+.compare-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.compare-card { background: var(--bg); border-radius: var(--radius-sm); padding: 20px; }
+.compare-card-header { font-size: 14px; font-weight: 700; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+.compare-row { display: flex; justify-content: space-between; padding: 8px 0; font-size: 13px; }
+.compare-row:nth-child(even) { background: rgba(0,0,0,.02); margin: 0 -20px; padding: 8px 20px; }
+.compare-diff { font-weight: 700; }
+.compare-diff.pos { color: var(--success); }
+.compare-diff.neg { color: var(--danger); }
+
+/* User mgmt */
+.user-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 18px; border-bottom: 1px solid var(--border-light);
+}
+.user-row:last-child { border-bottom: none; }
+.user-info { display: flex; align-items: center; gap: 12px; }
+.user-avatar-lg {
+  width: 40px; height: 40px; border-radius: 50%; background: var(--primary-soft); color: var(--primary);
+  display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 700;
+}
+.user-name { font-size: 14px; font-weight: 600; }
+.user-role { font-size: 12px; color: var(--text-muted); }
+
+/* Alerts */
+.alert {
+  padding: 12px 18px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 500;
+  margin-bottom: 16px; display: none;
+}
+.alert.show { display: block; }
+.alert-error { background: var(--danger-soft); color: var(--danger); }
+.alert-success { background: var(--success-soft); color: var(--success); }
+.alert-warning { background: var(--warning-soft); color: var(--warning); }
+
+/* Modal */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 100;
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+}
+.modal-box {
+  background: var(--surface); border-radius: var(--radius); max-width: 800px;
+  width: 100%; max-height: 90vh; overflow: auto; box-shadow: var(--shadow-lg);
+}
+.modal-header { padding: 18px 24px; border-bottom: 1px solid var(--border-light); display: flex; justify-content: space-between; align-items: center; }
+.modal-body { padding: 24px; }
+
+/* Empty state */
+.empty { text-align: center; padding: 48px 20px; color: var(--text-muted); }
+.empty svg { margin-bottom: 12px; opacity: .5; }
+.empty-title { font-size: 15px; font-weight: 600; color: var(--text-secondary); margin-bottom: 4px; }
+.empty-hint { font-size: 13px; }
+
+/* Hidden */
 .hidden { display: none !important; }
+
+/* Responsive */
 @media (max-width: 768px) {
-  .stats-grid { grid-template-columns: 1fr 1fr; }
+  .sidebar { width: var(--sidebar-collapsed); }
+  .sidebar .nav-item span, .sidebar .sidebar-sub, .sidebar .nav-section { display: none; }
+  .sidebar-logo span { display: none; }
+  .main { margin-left: var(--sidebar-collapsed); }
+  .stats-row { grid-template-columns: 1fr 1fr; }
   .compare-grid { grid-template-columns: 1fr; }
-  .history-item { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .form-row { grid-template-columns: 1fr; }
+  .history-row { flex-direction: column; align-items: flex-start; gap: 10px; }
   .history-stats { width: 100%; justify-content: space-between; }
 }
 </style>
 </head>
 <body>
 
-<h1>NTI Demand Summary Dashboard</h1>
-<p class="subtitle">Upload demand request files, get instant summaries, and track history across all stores.</p>
-
-<div id="alertBox" class="alert"></div>
-
-<div class="card">
-  <div class="card-title">
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-    Upload Demand Request
-  </div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
-    <div>
-      <label for="storeSelect">Store</label>
-      <select id="storeSelect">
-        <option value="">-- Select store --</option>
-        <option value="S4005GUJ">Satellite Town, Gujranwala</option>
-        <option value="S4009RHW">Gujranwala Rahwali store</option>
-        <option value="S4019KMG">King Mall Gujranwala</option>
-        <option value="S4004GRT">Kutchery road, Gujrat</option>
-        <option value="S4012SKT">V-Mall, Sialkot</option>
-        <option value="S4010SGD">Sargodha Store</option>
-        <option value="S4021MBH2">Jail Road Mandi Bahauddin-02 Store</option>
-      </select>
-    </div>
-    <div>
-      <label>Upload label (optional)</label>
-      <input type="text" id="uploadLabel" placeholder="e.g. July 2026 monthly demand">
-    </div>
-  </div>
-  <div class="dropzone" id="dropzone">
-    <svg class="dropzone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-    <div class="dropzone-title">Drop demand request file here</div>
-    <div class="dropzone-hint">or click to browse &mdash; .xlsx or .csv</div>
-    <input type="file" id="fileInput" accept=".xlsx,.csv" style="display:none">
-  </div>
-  <div id="fileName" style="margin-top:8px;font-size:13px;color:var(--text-quaternary);display:none"></div>
-</div>
-
-<div id="summaryCard" class="card hidden">
-  <div class="card-title">
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
-    Demand Summary &mdash; <span id="summaryStore"></span>
-  </div>
-  <div class="stats-grid">
-    <div class="stat-box"><div class="stat-label">Total items</div><div class="stat-value" id="totalItems">0</div></div>
-    <div class="stat-box"><div class="stat-label">Total value</div><div class="stat-value" id="totalValue">0</div></div>
-    <div class="stat-box"><div class="stat-label">Unique SKUs</div><div class="stat-value" id="totalSKUs">0</div></div>
-    <div class="stat-box"><div class="stat-label">Matched in NTI DB</div><div class="stat-value" id="matchedCount">0</div></div>
-  </div>
-  <div style="overflow-x:auto;">
-    <table>
-      <thead><tr><th>Item #</th><th>Product name</th><th class="text-center">Qty</th><th class="text-right">Unit price</th><th class="text-right">Line total</th></tr></thead>
-      <tbody id="breakdownBody"></tbody>
-    </table>
-  </div>
-  <div id="notFoundBox" class="alert alert-warning" style="margin-top:16px;">
-    <strong>Items not found in NTI database:</strong>
-    <div id="notFoundList" style="margin-top:4px;"></div>
-  </div>
-  <div style="margin-top:16px;display:flex;gap:8px;">
-    <button class="btn btn-primary" id="saveBtn">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-      Save to history
-    </button>
-    <button class="btn btn-secondary" id="clearBtn">Clear</button>
-  </div>
-</div>
-
-<div class="tabs">
-  <button class="tab active" data-tab="history" onclick="switchTab('history')">History</button>
-  <button class="tab" data-tab="compare" onclick="switchTab('compare')">Compare</button>
-</div>
-
-<div id="historyTab">
-  <div class="card">
-    <div class="card-title">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-      Previous Uploads
-    </div>
-    <div id="historyList">
-      <p style="text-align:center;color:var(--text-quaternary);padding:32px 0;font-size:14px;">No uploads yet. Upload a demand request file to see it here.</p>
-    </div>
-  </div>
-</div>
-
-<div id="compareTab" class="hidden">
-  <div class="card">
-    <div class="card-title">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3h3v3h-3z"/><path d="M8 3h3v3H8z"/><path d="M5 8h14v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V8z"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
-      Compare Uploads
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
-      <div>
-        <label>Select first upload</label>
-        <select id="compareA"><option value="">-- Choose --</option></select>
+<!-- ==================== LOGIN ==================== -->
+<div id="loginPage">
+  <div class="login-bg">
+    <div class="login-card">
+      <div class="login-logo">
+        <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#2563eb" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:12px;"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+        <h2>NTI Demand Portal</h2>
+        <p>Sign in to access your dashboard</p>
       </div>
-      <div>
-        <label>Select second upload</label>
-        <select id="compareB"><option value="">-- Choose --</option></select>
+      <div class="form-group">
+        <label class="form-label">Username</label>
+        <input type="text" id="loginUser" class="form-control" placeholder="Enter username" autocomplete="username">
       </div>
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <input type="password" id="loginPass" class="form-control" placeholder="Enter password" autocomplete="current-password">
+      </div>
+      <div id="loginError" class="alert alert-error" style="margin-bottom:12px;"></div>
+      <button class="btn btn-primary btn-block" onclick="doLogin()">Sign in</button>
     </div>
-    <button class="btn btn-primary" id="runCompareBtn" style="margin-bottom:16px;">Run comparison</button>
-    <div id="compareResult"></div>
   </div>
 </div>
 
-<div id="viewModal" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:100;display:flex;align-items:center;justify-content:center;padding:16px;">
-  <div style="background:var(--surface);border-radius:var(--radius-lg);max-width:900px;width:100%;max-height:90vh;overflow:auto;box-shadow:var(--shadow-lg);border:1px solid var(--border);">
-    <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
-      <div style="font-size:16px;font-weight:600;" id="viewModalTitle">Upload Details</div>
+<!-- ==================== APP ==================== -->
+<div id="app" class="app hidden">
+
+<!-- Sidebar -->
+<aside class="sidebar">
+  <div class="sidebar-header">
+    <div class="sidebar-logo">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+      <span>NTI Portal</span>
+    </div>
+    <div class="sidebar-sub">Demand Summary System</div>
+  </div>
+  <nav class="nav">
+    <div class="nav-section">Main</div>
+    <a class="nav-item active" data-page="upload" onclick="navTo('upload')">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      <span>Upload Demand</span>
+    </a>
+    <a class="nav-item" data-page="summary" onclick="navTo('summary')">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+      <span>Summary</span>
+    </a>
+
+    <div class="nav-section admin-only hidden">Admin</div>
+    <a class="nav-item admin-only hidden" data-page="history" onclick="navTo('history')">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      <span>History</span>
+    </a>
+    <a class="nav-item admin-only hidden" data-page="compare" onclick="navTo('compare')">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 3h3v3h-3z"/><path d="M8 3h3v3H8z"/><path d="M5 8h14v12a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V8z"/><line x1="12" y1="12" x2="12" y2="16"/></svg>
+      <span>Compare</span>
+    </a>
+    <a class="nav-item admin-only hidden" data-page="users" onclick="navTo('users')">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      <span>Users</span>
+    </a>
+    <a class="nav-item admin-only hidden" data-page="db" onclick="navTo('db')">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+      <span>NTI Database</span>
+    </a>
+  </nav>
+  <div class="sidebar-footer">
+    <div style="font-weight:600;color:rgba(255,255,255,.8);" id="sidebarUserName">—</div>
+    <div style="margin-top:2px;" id="sidebarUserRole">—</div>
+  </div>
+</aside>
+
+<!-- Main -->
+<main class="main">
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="topbar-title" id="pageTitle">Upload Demand</div>
+    </div>
+    <div class="topbar-right">
+      <div class="user-pill">
+        <div class="user-avatar" id="userAvatar">T</div>
+        <span id="topbarUserName">—</span>
+        <span class="badge badge-admin" id="topbarBadge">Admin</span>
+      </div>
+      <button class="btn btn-sm btn-secondary" onclick="doLogout()" style="padding:6px 12px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        Logout
+      </button>
+    </div>
+  </div>
+
+  <div class="content">
+    <div id="alertBox" class="alert"></div>
+
+    <!-- ===== UPLOAD PAGE ===== -->
+    <div id="page-upload" class="page active">
+      <div class="steps">
+        <div class="step active" id="step1"><div class="step-num">1</div><span>Select store</span></div>
+        <div class="step" id="step2"><div class="step-num">2</div><span>Upload file</span></div>
+        <div class="step" id="step3"><div class="step-num">3</div><span>Review</span></div>
+        <div class="step" id="step4"><div class="step-num">4</div><span>Save</span></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Store & Label</div>
+        </div>
+        <div class="card-body">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Store</label>
+              <select id="storeSelect" class="form-control">
+                <option value="">-- Select store --</option>
+                <option value="S4005GUJ">Satellite Town, Gujranwala</option>
+                <option value="S4009RHW">Gujranwala Rahwali store</option>
+                <option value="S4019KMG">King Mall Gujranwala</option>
+                <option value="S4004GRT">Kutchery road, Gujrat</option>
+                <option value="S4012SKT">V-Mall, Sialkot</option>
+                <option value="S4010SGD">Sargodha Store</option>
+                <option value="S4021MBH2">Jail Road Mandi Bahauddin-02 Store</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Label (optional)</label>
+              <input type="text" id="uploadLabel" class="form-control" placeholder="e.g. July 2026 monthly demand">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Upload File</div>
+        </div>
+        <div class="card-body">
+          <div class="upload-zone" id="dropzone">
+            <svg class="upload-zone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            <div class="upload-zone-title">Click to select or drop the .xlsx / .csv file</div>
+            <div class="upload-zone-hint">Raw demand request export — same format as your store request sheet</div>
+            <input type="file" id="fileInput" accept=".xlsx,.csv" style="display:none">
+          </div>
+          <div id="fileName" style="margin-top:10px;font-size:13px;color:var(--text-muted);display:none"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== SUMMARY PAGE ===== -->
+    <div id="page-summary" class="page">
+      <div class="stats-row">
+        <div class="stat-card" style="border-left:4px solid var(--primary);">
+          <div class="stat-label">Total items</div>
+          <div class="stat-value" id="totalItems">0</div>
+        </div>
+        <div class="stat-card" style="border-left:4px solid var(--success);">
+          <div class="stat-label">Total value</div>
+          <div class="stat-value" id="totalValue">0</div>
+        </div>
+        <div class="stat-card" style="border-left:4px solid var(--warning);">
+          <div class="stat-label">Unique SKUs</div>
+          <div class="stat-value" id="totalSKUs">0</div>
+        </div>
+        <div class="stat-card" style="border-left:4px solid #6366f1;">
+          <div class="stat-label">Matched in DB</div>
+          <div class="stat-value" id="matchedCount">0</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Line-item breakdown — <span id="summaryStore" style="color:var(--text-muted);font-weight:400;">—</span></div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-secondary" onclick="navTo('upload')">Back</button>
+            <button class="btn btn-primary" id="saveBtn">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+              Save
+            </button>
+          </div>
+        </div>
+        <div class="card-body" style="padding:0;">
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Item #</th><th>Product name</th><th class="text-center">Qty</th><th class="text-right">Unit price</th><th class="text-right">Line total</th></tr></thead>
+              <tbody id="breakdownBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div id="notFoundBox" class="alert alert-warning" style="display:none;">
+        <strong>Items not found in NTI database:</strong>
+        <div id="notFoundList" style="margin-top:4px;"></div>
+      </div>
+    </div>
+
+    <!-- ===== HISTORY PAGE (admin) ===== -->
+    <div id="page-history" class="page">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Upload History</div>
+        </div>
+        <div class="card-body" id="historyList"></div>
+      </div>
+    </div>
+
+    <!-- ===== COMPARE PAGE (admin) ===== -->
+    <div id="page-compare" class="page">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Select uploads to compare</div>
+        </div>
+        <div class="card-body">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">First upload</label>
+              <select id="compareA" class="form-control"><option value="">-- Choose --</option></select>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Second upload</label>
+              <select id="compareB" class="form-control"><option value="">-- Choose --</option></select>
+            </div>
+          </div>
+          <button class="btn btn-primary" id="runCompareBtn">Run comparison</button>
+        </div>
+      </div>
+      <div id="compareResult"></div>
+    </div>
+
+    <!-- ===== USERS PAGE (admin) ===== -->
+    <div id="page-users" class="page">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">All Users</div>
+          <button class="btn btn-success" onclick="showAddUserModal()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Add user
+          </button>
+        </div>
+        <div class="card-body" id="usersList"></div>
+      </div>
+    </div>
+
+    <!-- ===== DB PAGE (admin) ===== -->
+    <div id="page-db" class="page">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Update NTI Database</div>
+        </div>
+        <div class="card-body">
+          <p style="font-size:14px;color:var(--text-secondary);margin-bottom:16px;">
+            Upload a new Excel file to replace the embedded NTI database. Required columns: <strong>Item number, Product name, Search name, Item classification, Price</strong>.
+          </p>
+          <button class="btn btn-primary" onclick="document.getElementById('dbFileInput').click()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Pick new NTI database file
+          </button>
+          <input type="file" id="dbFileInput" accept=".xlsx,.csv" style="display:none" onchange="handleDBFile(this)">
+          <div id="dbStatus" style="margin-top:12px;font-size:13px;color:var(--text-muted);"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Current Database Overview</div>
+        </div>
+        <div class="card-body">
+          <div class="stats-row" style="margin-bottom:0;">
+            <div class="stat-card" style="border-left:4px solid var(--primary);">
+              <div class="stat-label">Total items</div>
+              <div class="stat-value" id="dbTotalItems">239</div>
+            </div>
+            <div class="stat-card" style="border-left:4px solid var(--success);">
+              <div class="stat-label">Categories</div>
+              <div class="stat-value" id="dbCategories">6</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</main>
+</div>
+
+<!-- View Modal -->
+<div id="viewModal" class="modal-overlay hidden" onclick="if(event.target===this)closeModal()">
+  <div class="modal-box">
+    <div class="modal-header">
+      <h3 id="viewModalTitle">Upload Details</h3>
       <button class="btn btn-sm btn-secondary" onclick="closeModal()">Close</button>
     </div>
-    <div style="padding:20px;" id="viewModalBody"></div>
+    <div class="modal-body" id="viewModalBody"></div>
+  </div>
+</div>
+
+<!-- Add User Modal -->
+<div id="addUserModal" class="modal-overlay hidden" onclick="if(event.target===this)closeAddUserModal()">
+  <div class="modal-box" style="max-width:420px;">
+    <div class="modal-header">
+      <h3>Add New User</h3>
+      <button class="btn btn-sm btn-secondary" onclick="closeAddUserModal()">Close</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Full name</label>
+        <input type="text" id="newUserName" class="form-control" placeholder="e.g. Ali Khan">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Username</label>
+        <input type="text" id="newUserUser" class="form-control" placeholder="e.g. ali.khan">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <input type="text" id="newUserPass" class="form-control" placeholder="Min 6 characters">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Role</label>
+        <select id="newUserRole" class="form-control">
+          <option value="user">User (upload only)</option>
+          <option value="admin">Admin (full access)</option>
+        </select>
+      </div>
+      <button class="btn btn-success btn-block" onclick="addUser()">Create user</button>
+    </div>
   </div>
 </div>
 
 <script>
-const NTI = {"640-MARK00049-01": {"name": "Coffee Beans- Fragrance", "price": 1.0, "class": "Beauty NTI"}, "621-GSU05056-01": {"name": "COTTON BALLS", "price": 1.0, "class": "Beauty NTI"}, "621-GSU05029-01": {"name": "Fragrance Tester Strips", "price": 1.0, "class": "Beauty NTI"}, "621-GSU05055-01": {"name": "Make-Up Remover", "price": 1.0, "class": "Beauty NTI"}, "621-GSU05057-01": {"name": "NAIL REMOVER", "price": 1.0, "class": "Beauty NTI"}, "621-CLE00002-01": {"name": "Air freshner (Sultan)", "price": 1.0, "class": "Other NTI List"}, "621-STA00004-01": {"name": "Ball Pens  (Black )", "price": 1.0, "class": "Other NTI List"}, "621-STA00002-01": {"name": "Ball Pens  (Blue )", "price": 1.0, "class": "Other NTI List"}, "621-STA00003-01": {"name": "Ball Pens  (Red )", "price": 1.0, "class": "Other NTI List"}, "621-GSU00006-01": {"name": "Battery Cell AAA", "price": 1.0, "class": "Other NTI List"}, "621-CLE00039-01": {"name": "Broom (Grass Floor)", "price": 1.0, "class": "Other NTI List"}, "621-STA00095-01": {"name": "Calculator Large", "price": 1.0, "class": "Other NTI List"}, "621-STA00041-01": {"name": "Clipper (Cutter)", "price": 1.0, "class": "Other NTI List"}, "631-STA00108-01": {"name": "Common pins", "price": 1.0, "class": "Other NTI List"}, "621-GSU00083-01": {"name": "Counter Closed Sign", "price": 1.0, "class": "Other NTI List"}, "621-STA00025-01": {"name": "Counter Pen", "price": 1.0, "class": "Other NTI List"}, "621-GSU00075-01": {"name": "Cr.Card Slip Holder", "price": 1.0, "class": "Other NTI List"}, "621-CRK00006-01": {"name": "Cup Saucer", "price": 1.0, "class": "Other NTI List"}, "621-GSU00063-01": {"name": "Currency Checking Machine", "price": 1.0, "class": "Other NTI List"}, "621-GSU00076-01": {"name": "Damper Ball", "price": 1.0, "class": "Other NTI List"}, "621-STA00043-01": {"name": "Discount Stamp", "price": 1.0, "class": "Other NTI List"}, "621-PMA00052-01": {"name": "Discount Stickers", "price": 1.0, "class": "Other NTI List"}, "621-CLE00030-01": {"name": "Dry Mop new", "price": 1.0, "class": "Other NTI List"}, "621-CLE00028-01": {"name": "Dry Mop Refill", "price": 1.0, "class": "Other NTI List"}, "621-GSU00016-01": {"name": "Dust Bin", "price": 1.0, "class": "Other NTI List"}, "621-CLE00005-01": {"name": "Duster fabric (Large)", "price": 1.0, "class": "Other NTI List"}, "621-CLE00004-01": {"name": "Duster fabric (small)", "price": 1.0, "class": "Other NTI List"}, "621-STA00026-01": {"name": "Elfi", "price": 1.0, "class": "Other NTI List"}, "621-STA00074-01": {"name": "Envelope Letter A4", "price": 1.0, "class": "Other NTI List"}, "621-STA00073-01": {"name": "Envelope Plain A4", "price": 1.0, "class": "Other NTI List"}, "621-STA00036-01": {"name": "Eraser", "price": 1.0, "class": "Other NTI List"}, "621-GSU00064-01": {"name": "Extention Wire", "price": 1.0, "class": "Other NTI List"}, "621-CLE00021-01": {"name": "Floor Towel", "price": 1.0, "class": "Other NTI List"}, "621-CLE00003-01": {"name": "Furniture Polish SPRAY", "price": 1.0, "class": "Other NTI List"}, "621-CLE00025-01": {"name": "Garbage Bag (SML) 18*24", "price": 1.0, "class": "Other NTI List"}, "621-CLE00049-01": {"name": "Garbage Bag Extra Large", "price": 1.0, "class": "Other NTI List"}, "621-CRK00001-01": {"name": "Glass (for Staff)", "price": 1.0, "class": "Other NTI List"}, "621-CRK00008-01": {"name": "Glass Jugs", "price": 1.0, "class": "Other NTI List"}, "621-CLE00011-01": {"name": "Glass Wiper", "price": 1.0, "class": "Other NTI List"}, "621-STA00027-01": {"name": "Gum stick", "price": 1.0, "class": "Other NTI List"}, "621-GSU00004-01": {"name": "Hard Tag Detacher", "price": 1.0, "class": "Other NTI List"}, "621-STA00030-01": {"name": "Highlighter", "price": 1.0, "class": "Other NTI List"}, "621-GSU00099-01": {"name": "Insect Killer Recket", "price": 1.0, "class": "Other NTI List"}, "931-EXP00894-01": {"name": "Iron Panasonic NI-22AWT", "price": 1.0, "class": "Other NTI List"}, "621-CRK00012-01": {"name": "Knife", "price": 1.0, "class": "Other NTI List"}, "621-CLE00018-01": {"name": "lemon max liquid", "price": 1.0, "class": "Other NTI List"}, "621-CLE00001-01": {"name": "Liquid Hand wash", "price": 1.0, "class": "Other NTI List"}, "621-CLE00037-01": {"name": "Magic duster thick quality", "price": 1.0, "class": "Other NTI List"}, "621-STA00018-01": {"name": "Marker Dollar Black", "price": 1.0, "class": "Other NTI List"}, "621-STA00022-01": {"name": "Measurement tapes", "price": 1.0, "class": "Other NTI List"}, "621-CLE00033-01": {"name": "MORTEIN SPRAY", "price": 1.0, "class": "Other NTI List"}, "621-STA00065-01": {"name": "Paper Clips", "price": 1.0, "class": "Other NTI List"}, "621-STA00040-01": {"name": "Paper Cutter", "price": 1.0, "class": "Other NTI List"}, "631-ADMN0100-01": {"name": "Paper Rim Copy mate 70g", "price": 1.0, "class": "Other NTI List"}, "621-STA00068-01": {"name": "Scissor Large", "price": 1.0, "class": "Other NTI List"}, "621-STA00045-01": {"name": "Paper Scissor Small", "price": 1.0, "class": "Other NTI List"}, "621-STA00079-01": {"name": "Pen Holder", "price": 1.0, "class": "Other NTI List"}, "621-STA00035-01": {"name": "Pencil", "price": 1.0, "class": "Other NTI List"}, "621-CRK00002-01": {"name": "Plates (SML)", "price": 1.0, "class": "Other NTI List"}, "621-STA00015-01": {"name": "Punch machine", "price": 1.0, "class": "Other NTI List"}, "621-STA00012-01": {"name": "Register", "price": 1.0, "class": "Other NTI List"}, "621-STA00046-01": {"name": "Retail Gatepass Books", "price": 1.0, "class": "Other NTI List"}, "621-STA00064-01": {"name": "Rubber Band", "price": 1.0, "class": "Other NTI List"}, "621-STA00020-01": {"name": "Scotch Tape 1 inch", "price": 1.0, "class": "Other NTI List"}, "621-STA00019-01": {"name": "Scotch Tape 2 inch", "price": 1.0, "class": "Other NTI List"}, "621-STA00037-01": {"name": "Sharpener", "price": 1.0, "class": "Other NTI List"}, "621-CLE00017-01": {"name": "Shoe Brush", "price": 1.0, "class": "Other NTI List"}, "621-CLE00015-01": {"name": "Shoe Polish (hard) Blk", "price": 1.0, "class": "Other NTI List"}, "621-CLE00014-01": {"name": "Shoe Polish liquid (black)", "price": 1.0, "class": "Other NTI List"}, "621-CLE00048-01": {"name": "Shoe Shiner", "price": 1.0, "class": "Other NTI List"}, "621-CRK00004-01": {"name": "Spoons Lrg", "price": 1.0, "class": "Other NTI List"}, "621-STA05074-01": {"name": "Stapler Large", "price": 1.0, "class": "Other NTI List"}, "621-STA00039-01": {"name": "Stapler Pin Openner", "price": 1.0, "class": "Other NTI List"}, "631-STA00057-01": {"name": "Stapler Pins Extra Large", "price": 1.0, "class": "Other NTI List"}, "621-STA00024-01": {"name": "Stapler Pins Large", "price": 1.0, "class": "Other NTI List"}, "621-STA00023-01": {"name": "Stapler Pins Small", "price": 1.0, "class": "Other NTI List"}, "621-STA00077-01": {"name": "Steel scale", "price": 1.0, "class": "Other NTI List"}, "621-GSU00073-01": {"name": "Step Bin", "price": 1.0, "class": "Other NTI List"}, "621-STA00010-01": {"name": "Stepler (Big size)", "price": 1.0, "class": "Other NTI List"}, "621-STA00008-01": {"name": "Stepler (SML)", "price": 1.0, "class": "Other NTI List"}, "621-STA00011-01": {"name": "Stepler Pins (Big size) 23/8", "price": 1.0, "class": "Other NTI List"}, "621-CLE00053-01": {"name": "Stick Broom", "price": 1.0, "class": "Other NTI List"}, "621-CLE00008-01": {"name": "Surf (Kgs)", "price": 1.0, "class": "Other NTI List"}, "621-STA00031-01": {"name": "Tag Gun", "price": 1.0, "class": "Other NTI List"}, "621-STA00032-01": {"name": "Tag Gun Pins", "price": 1.0, "class": "Other NTI List"}, "621-CRK00005-01": {"name": "Tea Spoon", "price": 1.0, "class": "Other NTI List"}, "621-STA00047-01": {"name": "Threads Rolls (mlt color)", "price": 1.0, "class": "Other NTI List"}, "621-STA00059-01": {"name": "Thumb Pins", "price": 1.0, "class": "Other NTI List"}, "621-GSU00128-01": {"name": "Tissue Box", "price": 1.0, "class": "Other NTI List"}, "621-CLE00006-01": {"name": "Tissue Rolls", "price": 1.0, "class": "Other NTI List"}, "621-CLE00040-01": {"name": "Toilet Brush", "price": 1.0, "class": "Other NTI List"}, "621-CLE00035-01": {"name": "Toilet Cleaner", "price": 1.0, "class": "Other NTI List"}, "621-STA00028-01": {"name": "UHU", "price": 1.0, "class": "Other NTI List"}, "621-CLE00010-01": {"name": "Viper (LRG)", "price": 1.0, "class": "Other NTI List"}, "621-CLE00029-01": {"name": "Wet Mop new", "price": 1.0, "class": "Other NTI List"}, "621-CLE00027-01": {"name": "Wet Mop Refill", "price": 1.0, "class": "Other NTI List"}, "OP-000275": {"name": "Barcode Printed Sack Lock Tie Size 15.75”", "price": 1.0, "class": "Packing Material NTI List"}, "621-PMA00009-01": {"name": "Butter Paper", "price": 1.0, "class": "Packing Material NTI List"}, "621-PMA00166-01": {"name": "Carton 23*15*10.5 (3ply)", "price": 1.0, "class": "Packing Material NTI List"}, "621-STA00021-01": {"name": "Masking Tape", "price": 1.0, "class": "Packing Material NTI List"}, "OP-000092": {"name": "Printed Polythene Bag gauge 8 micron Size 11”x 14”+2”", "price": 1.0, "class": "Packing Material NTI List"}, "621-PMA00190-01": {"name": "Sacks (Boray) 35*45", "price": 1.0, "class": "Packing Material NTI List"}, "621-TAG00023-01": {"name": "Soft Tags 40*40", "price": 1.0, "class": "Packing Material NTI List"}, "OP-000123": {"name": "Transparent Plain Tape Size 69mm 68 yard 40 Micron", "price": 1.0, "class": "Packing Material NTI List"}, "931-EXP00582-01": {"name": "Benhao Track Channel 1M", "price": 1.0, "class": "Projects Related NTI List"}, "931-EXP00583-01": {"name": "Benhao Track Connectors", "price": 1.0, "class": "Projects Related NTI List"}, "931-EXP00580-01": {"name": "Benhao Track Lights 30W 3500K", "price": 1.0, "class": "Projects Related NTI List"}, "931-EXP00256-01": {"name": "Track Light", "price": 1.0, "class": "Projects Related NTI List"}, "626-SDN00397-01": {"name": "Track Lights 30W", "price": 1.0, "class": "Projects Related NTI List"}, "626-SDN00399-01": {"name": "Track Patti", "price": 1.0, "class": "Projects Related NTI List"}, "621-HAN00001-01": {"name": "Bottom Hanger", "price": 1.0, "class": "Specialty Items NTI"}, "OP-000749": {"name": "Garment Hanger 50 x 47 x 32CM", "price": 1.0, "class": "Specialty Items NTI"}, "621-GSU00025-01": {"name": "Hanger", "price": 1.0, "class": "Specialty Items NTI"}, "OP-000751": {"name": "Hanger with Clip 46 x 45 x 33CM", "price": 1.0, "class": "Specialty Items NTI"}, "OP-000148": {"name": "Imported steamer LT-8 2200W Water Capacity 3L", "price": 1.0, "class": "Specialty Items NTI"}, "621-BAG00001-01": {"name": "In-Store Bag (Black)", "price": 1.0, "class": "Specialty Items NTI"}, "621-BAG00002-01": {"name": "In-Store Bag (Grey) H18\" x W20\" x D5\"", "price": 1.0, "class": "Specialty Items NTI"}, "OP-000752": {"name": "Jacket Hanger 36 x 36 x 52CM", "price": 1.0, "class": "Specialty Items NTI"}, "621-HAN00014-01": {"name": "KIDS WOODEN HANGER 2PCS/ 3PCS 12\"", "price": 1.0, "class": "Specialty Items NTI"}, "621-HAN00012-01": {"name": "KIDS WOODEN HANGER BOTTOMS 12\"", "price": 1.0, "class": "Specialty Items NTI"}, "621-HAN00010-01": {"name": "KIDS WOODEN HANGER WESTERN AND EASTERN TOPS  12\"", "price": 1.0, "class": "Specialty Items NTI"}, "OP-000750": {"name": "Pants Hanger 50 x 34 x 29CM", "price": 1.0, "class": "Specialty Items NTI"}, "631-ADMN0834-01": {"name": "Plastic Garment Hanger with Bar 43 cm x 1.2 cm", "price": 1.0, "class": "Specialty Items NTI"}, "931-EXP00755-01": {"name": "Plastic Garment Hanger 42 cm x 1.2 cm", "price": 1.0, "class": "Specialty Items NTI"}, "931-EXP00756-01": {"name": "Plastic Pants Hanger 32.5 cm x 1.2cm", "price": 1.0, "class": "Specialty Items NTI"}, "621-SHS00034-01": {"name": "Belt", "price": 1.0, "class": "Uniform NTI List"}, "621-ADMW0140-01": {"name": "Blazer - Women", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0284-01": {"name": "Blazer-LRG", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0283-01": {"name": "Blazer-MDM", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0282-01": {"name": "Blazer-SML", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0285-01": {"name": "Blazer-XLG", "price": 1.0, "class": "Uniform NTI List"}, "621-UNF00063-01": {"name": "Ladies Sweater", "price": 1.0, "class": "Uniform NTI List"}, "621-BLT00003-01": {"name": "Leather Belt Men 36\"", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0264-01": {"name": "Men Black Polo Shirt-XXS", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0265-01": {"name": "Men Black Polo Shirt-XS", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0266-01": {"name": "Men Black Polo Shirt-SML", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0267-01": {"name": "Men Black Polo Shirt-MDM", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0268-01": {"name": "Men Black Polo Shirt-LRG", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0269-01": {"name": "Men Black Polo Shirt-XLG", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0280-01": {"name": "Men Black Shirt-LRG", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0279-01": {"name": "Men Black Shirt-MDM", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0278-01": {"name": "Men Black Shirt-SML", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0281-01": {"name": "Men Black Shirt-XLG", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0277-01": {"name": "Men Black Shirt-XS", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0276-01": {"name": "Men Black Shirt-XXS", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0153-01": {"name": "Men Blazer", "price": 1.0, "class": "Uniform NTI List"}, "OP-000762": {"name": "Men Blazer Navy L", "price": 1.0, "class": "Uniform NTI List"}, "OP-000760": {"name": "Men Blazer Navy S", "price": 1.0, "class": "Uniform NTI List"}, "OP-000763": {"name": "Men Blazer Navy XL", "price": 1.0, "class": "Uniform NTI List"}, "OP-000773": {"name": "Men Blue & White YD shirt", "price": 1.0, "class": "Uniform NTI List"}, "OP-000775": {"name": "Men Brown & White YD shirt", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0258-01": {"name": "Men Grey Polo Shirt-XXS", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0259-01": {"name": "Men Grey Polo Shirt-XS", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0260-01": {"name": "Men Grey Polo Shirt-SML", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0261-01": {"name": "Men Grey Polo Shirt-MDM", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0262-01": {"name": "Men Grey Polo Shirt-LRG", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0263-01": {"name": "Men Grey Polo Shirt-XLG", "price": 1.0, "class": "Uniform NTI List"}, "OP-000506": {"name": "Men Jeans 28", "price": 1.0, "class": "Uniform NTI List"}, "OP-000507": {"name": "Men Jeans 30", "price": 1.0, "class": "Uniform NTI List"}, "OP-000508": {"name": "Men Jeans 32", "price": 1.0, "class": "Uniform NTI List"}, "OP-000509": {"name": "Men Jeans 34", "price": 1.0, "class": "Uniform NTI List"}, "OP-000510": {"name": "Men Jeans 36", "price": 1.0, "class": "Uniform NTI List"}, "621-SHS00030-01": {"name": "Men Pant", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0290-01": {"name": "Men pants-28", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0291-01": {"name": "Men pants-30", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0292-01": {"name": "Men pants-32", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0293-01": {"name": "Men pants-34", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0294-01": {"name": "Men pants-36", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0295-01": {"name": "Men pants-38", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0296-01": {"name": "Men pants-40", "price": 1.0, "class": "Uniform NTI List"}, "621-SHS00031-01": {"name": "Men Shirt", "price": 1.0, "class": "Uniform NTI List"}, "621-SHS00036-01": {"name": "Men Shoes", "price": 1.0, "class": "Uniform NTI List"}, "OP-000357": {"name": "Men Shoes 40", "price": 1.0, "class": "Uniform NTI List"}, "621-SHS00029-01": {"name": "Men Socks", "price": 1.0, "class": "Uniform NTI List"}, "OP-000739": {"name": "Men T-Shirt Grey L", "price": 1.0, "class": "Uniform NTI List"}, "OP-000738": {"name": "Men T-Shirt Grey M", "price": 1.0, "class": "Uniform NTI List"}, "OP-000737": {"name": "Men T-Shirt Grey S", "price": 1.0, "class": "Uniform NTI List"}, "OP-000740": {"name": "Men T-Shirt Grey XL", "price": 1.0, "class": "Uniform NTI List"}, "OP-000511": {"name": "Mens Black Pant 28", "price": 1.0, "class": "Uniform NTI List"}, "OP-000512": {"name": "Mens Black Pant 30", "price": 1.0, "class": "Uniform NTI List"}, "OP-000513": {"name": "Mens Black Pant 32", "price": 1.0, "class": "Uniform NTI List"}, "OP-000514": {"name": "Mens Black Pant 34", "price": 1.0, "class": "Uniform NTI List"}, "OP-000515": {"name": "Mens Black Pant 36", "price": 1.0, "class": "Uniform NTI List"}, "OP-000516": {"name": "Mens Black Pant 38", "price": 1.0, "class": "Uniform NTI List"}, "OP-000517": {"name": "Mens Black Pant 40", "price": 1.0, "class": "Uniform NTI List"}, "OP-000539": {"name": "Mens Blue Shirt L", "price": 1.0, "class": "Uniform NTI List"}, "OP-000538": {"name": "Mens Blue Shirt M", "price": 1.0, "class": "Uniform NTI List"}, "OP-000540": {"name": "Mens Blue Shirt XL", "price": 1.0, "class": "Uniform NTI List"}, "OP-000536": {"name": "Mens Blue Shirt XS", "price": 1.0, "class": "Uniform NTI List"}, "OP-000535": {"name": "Mens Blue Shirt XXS", "price": 1.0, "class": "Uniform NTI List"}, "OP-000518": {"name": "Mens Navy Pant 28", "price": 1.0, "class": "Uniform NTI List"}, "OP-000519": {"name": "Mens Navy Pant 30", "price": 1.0, "class": "Uniform NTI List"}, "OP-000520": {"name": "Mens Navy Pant 32", "price": 1.0, "class": "Uniform NTI List"}, "OP-000521": {"name": "Mens Navy Pant 34", "price": 1.0, "class": "Uniform NTI List"}, "OP-000522": {"name": "Mens Navy Pant 36", "price": 1.0, "class": "Uniform NTI List"}, "OP-000523": {"name": "Mens Navy Pant 38", "price": 1.0, "class": "Uniform NTI List"}, "OP-000524": {"name": "Mens Navy Pant 40", "price": 1.0, "class": "Uniform NTI List"}, "621-UNF00062-01": {"name": "Mens sweater", "price": 1.0, "class": "Uniform NTI List"}, "621-SHS00035-01": {"name": "Scarf", "price": 1.0, "class": "Uniform NTI List"}, "621-ADMW0138-01": {"name": "Tee shirt - Men", "price": 1.0, "class": "Uniform NTI List"}, "621-ADMW0139-01": {"name": "Tee shirt - Women", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0187-01": {"name": "Trainee Badge", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0297-01": {"name": "Uniform Scarves-999", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0274-01": {"name": "Women Black Shirts-LRG", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0273-01": {"name": "Women Black Shirts-MDM", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0272-01": {"name": "Women Black Shirts-SML", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0270-01": {"name": "Women Black Shirts-XXS", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0271-01": {"name": "Women Black Shirts-XS", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0275-01": {"name": "Women Black Shirts-XLG", "price": 1.0, "class": "Uniform NTI List"}, "OP-000766": {"name": "Women Blazer Navy L", "price": 1.0, "class": "Uniform NTI List"}, "OP-000765": {"name": "Women Blazer Navy M", "price": 1.0, "class": "Uniform NTI List"}, "OP-000764": {"name": "Women Blazer Navy S", "price": 1.0, "class": "Uniform NTI List"}, "OP-000774": {"name": "Women Blue & White YD shirt", "price": 1.0, "class": "Uniform NTI List"}, "OP-000776": {"name": "Women Brown & White YD shirt", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0156-01": {"name": "Women Pant", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0541-01": {"name": "Women Pants XLG", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0289-01": {"name": "Women Pants-LRG", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0288-01": {"name": "Women Pants-MDM", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0287-01": {"name": "Women Pants-SML", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0286-01": {"name": "Women Pants-XS", "price": 1.0, "class": "Uniform NTI List"}, "OP-000691": {"name": "Women Scarf Beige", "price": 1.0, "class": "Uniform NTI List"}, "OP-000692": {"name": "Women Scarf Navy Blue", "price": 1.0, "class": "Uniform NTI List"}, "621-SHS00032-01": {"name": "Women Shirt", "price": 1.0, "class": "Uniform NTI List"}, "621-SHS00027-01": {"name": "Women Shoes", "price": 1.0, "class": "Uniform NTI List"}, "OP-000364": {"name": "Women Shoes 37", "price": 1.0, "class": "Uniform NTI List"}, "621-SHS00028-01": {"name": "Women Socks", "price": 1.0, "class": "Uniform NTI List"}, "OP-000528": {"name": "Womens Black Pant L", "price": 1.0, "class": "Uniform NTI List"}, "OP-000527": {"name": "Womens Black Pant M", "price": 1.0, "class": "Uniform NTI List"}, "OP-000526": {"name": "Womens Black Pant S", "price": 1.0, "class": "Uniform NTI List"}, "OP-000529": {"name": "Womens Black Pant XL", "price": 1.0, "class": "Uniform NTI List"}, "OP-000545": {"name": "Womens Blue Shirt L", "price": 1.0, "class": "Uniform NTI List"}, "OP-000544": {"name": "Womens Blue Shirt M", "price": 1.0, "class": "Uniform NTI List"}, "OP-000546": {"name": "Womens Blue Shirt XL", "price": 1.0, "class": "Uniform NTI List"}, "OP-000542": {"name": "Womens Blue Shirt XS", "price": 1.0, "class": "Uniform NTI List"}, "OP-000541": {"name": "Womens Blue Shirt XXS", "price": 1.0, "class": "Uniform NTI List"}, "OP-000533": {"name": "Womens Navy Pant L", "price": 1.0, "class": "Uniform NTI List"}, "OP-000532": {"name": "Womens Navy Pant M", "price": 1.0, "class": "Uniform NTI List"}, "OP-000534": {"name": "Womens Navy Pant XL", "price": 1.0, "class": "Uniform NTI List"}, "OP-000530": {"name": "Womens Navy Pant XS", "price": 1.0, "class": "Uniform NTI List"}};
 
+// ===================== NTI DATABASE =====================
+const DEFAULT_NTI = {"640-MARK00049-01": {"name": "Coffee Beans- Fragrance", "price": 1.0, "class": "Beauty NTI"}, "621-GSU05056-01": {"name": "COTTON BALLS", "price": 1.0, "class": "Beauty NTI"}, "621-GSU05029-01": {"name": "Fragrance Tester Strips", "price": 1.0, "class": "Beauty NTI"}, "621-GSU05055-01": {"name": "Make-Up Remover", "price": 1.0, "class": "Beauty NTI"}, "621-GSU05057-01": {"name": "NAIL REMOVER", "price": 1.0, "class": "Beauty NTI"}, "621-CLE00002-01": {"name": "Air freshner (Sultan)", "price": 1.0, "class": "Other NTI List"}, "621-STA00004-01": {"name": "Ball Pens  (Black )", "price": 1.0, "class": "Other NTI List"}, "621-STA00002-01": {"name": "Ball Pens  (Blue )", "price": 1.0, "class": "Other NTI List"}, "621-STA00003-01": {"name": "Ball Pens  (Red )", "price": 1.0, "class": "Other NTI List"}, "621-GSU00006-01": {"name": "Battery Cell AAA", "price": 1.0, "class": "Other NTI List"}, "621-CLE00039-01": {"name": "Broom (Grass Floor)", "price": 1.0, "class": "Other NTI List"}, "621-STA00095-01": {"name": "Calculator Large", "price": 1.0, "class": "Other NTI List"}, "621-STA00041-01": {"name": "Clipper (Cutter)", "price": 1.0, "class": "Other NTI List"}, "631-STA00108-01": {"name": "Common pins", "price": 1.0, "class": "Other NTI List"}, "621-GSU00083-01": {"name": "Counter Closed Sign", "price": 1.0, "class": "Other NTI List"}, "621-STA00025-01": {"name": "Counter Pen", "price": 1.0, "class": "Other NTI List"}, "621-GSU00075-01": {"name": "Cr.Card Slip Holder", "price": 1.0, "class": "Other NTI List"}, "621-CRK00006-01": {"name": "Cup Saucer", "price": 1.0, "class": "Other NTI List"}, "621-GSU00063-01": {"name": "Currency Checking Machine", "price": 1.0, "class": "Other NTI List"}, "621-GSU00076-01": {"name": "Damper Ball", "price": 1.0, "class": "Other NTI List"}, "621-STA00043-01": {"name": "Discount Stamp", "price": 1.0, "class": "Other NTI List"}, "621-PMA00052-01": {"name": "Discount Stickers", "price": 1.0, "class": "Other NTI List"}, "621-CLE00030-01": {"name": "Dry Mop new", "price": 1.0, "class": "Other NTI List"}, "621-CLE00028-01": {"name": "Dry Mop Refill", "price": 1.0, "class": "Other NTI List"}, "621-GSU00016-01": {"name": "Dust Bin", "price": 1.0, "class": "Other NTI List"}, "621-CLE00005-01": {"name": "Duster fabric (Large)", "price": 1.0, "class": "Other NTI List"}, "621-CLE00004-01": {"name": "Duster fabric (small)", "price": 1.0, "class": "Other NTI List"}, "621-STA00026-01": {"name": "Elfi", "price": 1.0, "class": "Other NTI List"}, "621-STA00074-01": {"name": "Envelope Letter A4", "price": 1.0, "class": "Other NTI List"}, "621-STA00073-01": {"name": "Envelope Plain A4", "price": 1.0, "class": "Other NTI List"}, "621-STA00036-01": {"name": "Eraser", "price": 1.0, "class": "Other NTI List"}, "621-GSU00064-01": {"name": "Extention Wire", "price": 1.0, "class": "Other NTI List"}, "621-CLE00021-01": {"name": "Floor Towel", "price": 1.0, "class": "Other NTI List"}, "621-CLE00003-01": {"name": "Furniture Polish SPRAY", "price": 1.0, "class": "Other NTI List"}, "621-CLE00025-01": {"name": "Garbage Bag (SML) 18*24", "price": 1.0, "class": "Other NTI List"}, "621-CLE00049-01": {"name": "Garbage Bag Extra Large", "price": 1.0, "class": "Other NTI List"}, "621-CRK00001-01": {"name": "Glass (for Staff)", "price": 1.0, "class": "Other NTI List"}, "621-CRK00008-01": {"name": "Glass Jugs", "price": 1.0, "class": "Other NTI List"}, "621-CLE00011-01": {"name": "Glass Wiper", "price": 1.0, "class": "Other NTI List"}, "621-STA00027-01": {"name": "Gum stick", "price": 1.0, "class": "Other NTI List"}, "621-GSU00004-01": {"name": "Hard Tag Detacher", "price": 1.0, "class": "Other NTI List"}, "621-STA00030-01": {"name": "Highlighter", "price": 1.0, "class": "Other NTI List"}, "621-GSU00099-01": {"name": "Insect Killer Recket", "price": 1.0, "class": "Other NTI List"}, "931-EXP00894-01": {"name": "Iron Panasonic NI-22AWT", "price": 1.0, "class": "Other NTI List"}, "621-CRK00012-01": {"name": "Knife", "price": 1.0, "class": "Other NTI List"}, "621-CLE00018-01": {"name": "lemon max liquid", "price": 1.0, "class": "Other NTI List"}, "621-CLE00001-01": {"name": "Liquid Hand wash", "price": 1.0, "class": "Other NTI List"}, "621-CLE00037-01": {"name": "Magic duster thick quality", "price": 1.0, "class": "Other NTI List"}, "621-STA00018-01": {"name": "Marker Dollar Black", "price": 1.0, "class": "Other NTI List"}, "621-STA00022-01": {"name": "Measurement tapes", "price": 1.0, "class": "Other NTI List"}, "621-CLE00033-01": {"name": "MORTEIN SPRAY", "price": 1.0, "class": "Other NTI List"}, "621-STA00065-01": {"name": "Paper Clips", "price": 1.0, "class": "Other NTI List"}, "621-STA00040-01": {"name": "Paper Cutter", "price": 1.0, "class": "Other NTI List"}, "631-ADMN0100-01": {"name": "Paper Rim Copy mate 70g", "price": 1.0, "class": "Other NTI List"}, "621-STA00068-01": {"name": "Scissor Large", "price": 1.0, "class": "Other NTI List"}, "621-STA00045-01": {"name": "Paper Scissor Small", "price": 1.0, "class": "Other NTI List"}, "621-STA00079-01": {"name": "Pen Holder", "price": 1.0, "class": "Other NTI List"}, "621-STA00035-01": {"name": "Pencil", "price": 1.0, "class": "Other NTI List"}, "621-CRK00002-01": {"name": "Plates (SML)", "price": 1.0, "class": "Other NTI List"}, "621-STA00015-01": {"name": "Punch machine", "price": 1.0, "class": "Other NTI List"}, "621-STA00012-01": {"name": "Register", "price": 1.0, "class": "Other NTI List"}, "621-STA00046-01": {"name": "Retail Gatepass Books", "price": 1.0, "class": "Other NTI List"}, "621-STA00064-01": {"name": "Rubber Band", "price": 1.0, "class": "Other NTI List"}, "621-STA00020-01": {"name": "Scotch Tape 1 inch", "price": 1.0, "class": "Other NTI List"}, "621-STA00019-01": {"name": "Scotch Tape 2 inch", "price": 1.0, "class": "Other NTI List"}, "621-STA00037-01": {"name": "Sharpener", "price": 1.0, "class": "Other NTI List"}, "621-CLE00017-01": {"name": "Shoe Brush", "price": 1.0, "class": "Other NTI List"}, "621-CLE00015-01": {"name": "Shoe Polish (hard) Blk", "price": 1.0, "class": "Other NTI List"}, "621-CLE00014-01": {"name": "Shoe Polish liquid (black)", "price": 1.0, "class": "Other NTI List"}, "621-CLE00048-01": {"name": "Shoe Shiner", "price": 1.0, "class": "Other NTI List"}, "621-CRK00004-01": {"name": "Spoons Lrg", "price": 1.0, "class": "Other NTI List"}, "621-STA05074-01": {"name": "Stapler Large", "price": 1.0, "class": "Other NTI List"}, "621-STA00039-01": {"name": "Stapler Pin Openner", "price": 1.0, "class": "Other NTI List"}, "631-STA00057-01": {"name": "Stapler Pins Extra Large", "price": 1.0, "class": "Other NTI List"}, "621-STA00024-01": {"name": "Stapler Pins Large", "price": 1.0, "class": "Other NTI List"}, "621-STA00023-01": {"name": "Stapler Pins Small", "price": 1.0, "class": "Other NTI List"}, "621-STA00077-01": {"name": "Steel scale", "price": 1.0, "class": "Other NTI List"}, "621-GSU00073-01": {"name": "Step Bin", "price": 1.0, "class": "Other NTI List"}, "621-STA00010-01": {"name": "Stepler (Big size)", "price": 1.0, "class": "Other NTI List"}, "621-STA00008-01": {"name": "Stepler (SML)", "price": 1.0, "class": "Other NTI List"}, "621-STA00011-01": {"name": "Stepler Pins (Big size) 23/8", "price": 1.0, "class": "Other NTI List"}, "621-CLE00053-01": {"name": "Stick Broom", "price": 1.0, "class": "Other NTI List"}, "621-CLE00008-01": {"name": "Surf (Kgs)", "price": 1.0, "class": "Other NTI List"}, "621-STA00031-01": {"name": "Tag Gun", "price": 1.0, "class": "Other NTI List"}, "621-STA00032-01": {"name": "Tag Gun Pins", "price": 1.0, "class": "Other NTI List"}, "621-CRK00005-01": {"name": "Tea Spoon", "price": 1.0, "class": "Other NTI List"}, "621-STA00047-01": {"name": "Threads Rolls (mlt color)", "price": 1.0, "class": "Other NTI List"}, "621-STA00059-01": {"name": "Thumb Pins", "price": 1.0, "class": "Other NTI List"}, "621-GSU00128-01": {"name": "Tissue Box", "price": 1.0, "class": "Other NTI List"}, "621-CLE00006-01": {"name": "Tissue Rolls", "price": 1.0, "class": "Other NTI List"}, "621-CLE00040-01": {"name": "Toilet Brush", "price": 1.0, "class": "Other NTI List"}, "621-CLE00035-01": {"name": "Toilet Cleaner", "price": 1.0, "class": "Other NTI List"}, "621-STA00028-01": {"name": "UHU", "price": 1.0, "class": "Other NTI List"}, "621-CLE00010-01": {"name": "Viper (LRG)", "price": 1.0, "class": "Other NTI List"}, "621-CLE00029-01": {"name": "Wet Mop new", "price": 1.0, "class": "Other NTI List"}, "621-CLE00027-01": {"name": "Wet Mop Refill", "price": 1.0, "class": "Other NTI List"}, "OP-000275": {"name": "Barcode Printed Sack Lock Tie Size 15.75”", "price": 1.0, "class": "Packing Material NTI List"}, "621-PMA00009-01": {"name": "Butter Paper", "price": 1.0, "class": "Packing Material NTI List"}, "621-PMA00166-01": {"name": "Carton 23*15*10.5 (3ply)", "price": 1.0, "class": "Packing Material NTI List"}, "621-STA00021-01": {"name": "Masking Tape", "price": 1.0, "class": "Packing Material NTI List"}, "OP-000092": {"name": "Printed Polythene Bag gauge 8 micron Size 11”x 14”+2”", "price": 1.0, "class": "Packing Material NTI List"}, "621-PMA00190-01": {"name": "Sacks (Boray) 35*45", "price": 1.0, "class": "Packing Material NTI List"}, "621-TAG00023-01": {"name": "Soft Tags 40*40", "price": 1.0, "class": "Packing Material NTI List"}, "OP-000123": {"name": "Transparent Plain Tape Size 69mm 68 yard 40 Micron", "price": 1.0, "class": "Packing Material NTI List"}, "931-EXP00582-01": {"name": "Benhao Track Channel 1M", "price": 1.0, "class": "Projects Related NTI List"}, "931-EXP00583-01": {"name": "Benhao Track Connectors", "price": 1.0, "class": "Projects Related NTI List"}, "931-EXP00580-01": {"name": "Benhao Track Lights 30W 3500K", "price": 1.0, "class": "Projects Related NTI List"}, "931-EXP00256-01": {"name": "Track Light", "price": 1.0, "class": "Projects Related NTI List"}, "626-SDN00397-01": {"name": "Track Lights 30W", "price": 1.0, "class": "Projects Related NTI List"}, "626-SDN00399-01": {"name": "Track Patti", "price": 1.0, "class": "Projects Related NTI List"}, "621-HAN00001-01": {"name": "Bottom Hanger", "price": 1.0, "class": "Specialty Items NTI"}, "OP-000749": {"name": "Garment Hanger 50 x 47 x 32CM", "price": 1.0, "class": "Specialty Items NTI"}, "621-GSU00025-01": {"name": "Hanger", "price": 1.0, "class": "Specialty Items NTI"}, "OP-000751": {"name": "Hanger with Clip 46 x 45 x 33CM", "price": 1.0, "class": "Specialty Items NTI"}, "OP-000148": {"name": "Imported steamer LT-8 2200W Water Capacity 3L", "price": 1.0, "class": "Specialty Items NTI"}, "621-BAG00001-01": {"name": "In-Store Bag (Black)", "price": 1.0, "class": "Specialty Items NTI"}, "621-BAG00002-01": {"name": "In-Store Bag (Grey) H18\" x W20\" x D5\"", "price": 1.0, "class": "Specialty Items NTI"}, "OP-000752": {"name": "Jacket Hanger 36 x 36 x 52CM", "price": 1.0, "class": "Specialty Items NTI"}, "621-HAN00014-01": {"name": "KIDS WOODEN HANGER 2PCS/ 3PCS 12\"", "price": 1.0, "class": "Specialty Items NTI"}, "621-HAN00012-01": {"name": "KIDS WOODEN HANGER BOTTOMS 12\"", "price": 1.0, "class": "Specialty Items NTI"}, "621-HAN00010-01": {"name": "KIDS WOODEN HANGER WESTERN AND EASTERN TOPS  12\"", "price": 1.0, "class": "Specialty Items NTI"}, "OP-000750": {"name": "Pants Hanger 50 x 34 x 29CM", "price": 1.0, "class": "Specialty Items NTI"}, "631-ADMN0834-01": {"name": "Plastic Garment Hanger with Bar 43 cm x 1.2 cm", "price": 1.0, "class": "Specialty Items NTI"}, "931-EXP00755-01": {"name": "Plastic Garment Hanger 42 cm x 1.2 cm", "price": 1.0, "class": "Specialty Items NTI"}, "931-EXP00756-01": {"name": "Plastic Pants Hanger 32.5 cm x 1.2cm", "price": 1.0, "class": "Specialty Items NTI"}, "621-SHS00034-01": {"name": "Belt", "price": 1.0, "class": "Uniform NTI List"}, "621-ADMW0140-01": {"name": "Blazer - Women", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0284-01": {"name": "Blazer-LRG", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0283-01": {"name": "Blazer-MDM", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0282-01": {"name": "Blazer-SML", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0285-01": {"name": "Blazer-XLG", "price": 1.0, "class": "Uniform NTI List"}, "621-UNF00063-01": {"name": "Ladies Sweater", "price": 1.0, "class": "Uniform NTI List"}, "621-BLT00003-01": {"name": "Leather Belt Men 36\"", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0264-01": {"name": "Men Black Polo Shirt-XXS", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0265-01": {"name": "Men Black Polo Shirt-XS", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0266-01": {"name": "Men Black Polo Shirt-SML", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0267-01": {"name": "Men Black Polo Shirt-MDM", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0268-01": {"name": "Men Black Polo Shirt-LRG", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0269-01": {"name": "Men Black Polo Shirt-XLG", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0280-01": {"name": "Men Black Shirt-LRG", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0279-01": {"name": "Men Black Shirt-MDM", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0278-01": {"name": "Men Black Shirt-SML", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0281-01": {"name": "Men Black Shirt-XLG", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0277-01": {"name": "Men Black Shirt-XS", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0276-01": {"name": "Men Black Shirt-XXS", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0153-01": {"name": "Men Blazer", "price": 1.0, "class": "Uniform NTI List"}, "OP-000762": {"name": "Men Blazer Navy L", "price": 1.0, "class": "Uniform NTI List"}, "OP-000760": {"name": "Men Blazer Navy S", "price": 1.0, "class": "Uniform NTI List"}, "OP-000763": {"name": "Men Blazer Navy XL", "price": 1.0, "class": "Uniform NTI List"}, "OP-000773": {"name": "Men Blue & White YD shirt", "price": 1.0, "class": "Uniform NTI List"}, "OP-000775": {"name": "Men Brown & White YD shirt", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0258-01": {"name": "Men Grey Polo Shirt-XXS", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0259-01": {"name": "Men Grey Polo Shirt-XS", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0260-01": {"name": "Men Grey Polo Shirt-SML", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0261-01": {"name": "Men Grey Polo Shirt-MDM", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0262-01": {"name": "Men Grey Polo Shirt-LRG", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0263-01": {"name": "Men Grey Polo Shirt-XLG", "price": 1.0, "class": "Uniform NTI List"}, "OP-000506": {"name": "Men Jeans 28", "price": 1.0, "class": "Uniform NTI List"}, "OP-000507": {"name": "Men Jeans 30", "price": 1.0, "class": "Uniform NTI List"}, "OP-000508": {"name": "Men Jeans 32", "price": 1.0, "class": "Uniform NTI List"}, "OP-000509": {"name": "Men Jeans 34", "price": 1.0, "class": "Uniform NTI List"}, "OP-000510": {"name": "Men Jeans 36", "price": 1.0, "class": "Uniform NTI List"}, "621-SHS00030-01": {"name": "Men Pant", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0290-01": {"name": "Men pants-28", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0291-01": {"name": "Men pants-30", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0292-01": {"name": "Men pants-32", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0293-01": {"name": "Men pants-34", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0294-01": {"name": "Men pants-36", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0295-01": {"name": "Men pants-38", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0296-01": {"name": "Men pants-40", "price": 1.0, "class": "Uniform NTI List"}, "621-SHS00031-01": {"name": "Men Shirt", "price": 1.0, "class": "Uniform NTI List"}, "621-SHS00036-01": {"name": "Men Shoes", "price": 1.0, "class": "Uniform NTI List"}, "OP-000357": {"name": "Men Shoes 40", "price": 1.0, "class": "Uniform NTI List"}, "621-SHS00029-01": {"name": "Men Socks", "price": 1.0, "class": "Uniform NTI List"}, "OP-000739": {"name": "Men T-Shirt Grey L", "price": 1.0, "class": "Uniform NTI List"}, "OP-000738": {"name": "Men T-Shirt Grey M", "price": 1.0, "class": "Uniform NTI List"}, "OP-000737": {"name": "Men T-Shirt Grey S", "price": 1.0, "class": "Uniform NTI List"}, "OP-000740": {"name": "Men T-Shirt Grey XL", "price": 1.0, "class": "Uniform NTI List"}, "OP-000511": {"name": "Mens Black Pant 28", "price": 1.0, "class": "Uniform NTI List"}, "OP-000512": {"name": "Mens Black Pant 30", "price": 1.0, "class": "Uniform NTI List"}, "OP-000513": {"name": "Mens Black Pant 32", "price": 1.0, "class": "Uniform NTI List"}, "OP-000514": {"name": "Mens Black Pant 34", "price": 1.0, "class": "Uniform NTI List"}, "OP-000515": {"name": "Mens Black Pant 36", "price": 1.0, "class": "Uniform NTI List"}, "OP-000516": {"name": "Mens Black Pant 38", "price": 1.0, "class": "Uniform NTI List"}, "OP-000517": {"name": "Mens Black Pant 40", "price": 1.0, "class": "Uniform NTI List"}, "OP-000539": {"name": "Mens Blue Shirt L", "price": 1.0, "class": "Uniform NTI List"}, "OP-000538": {"name": "Mens Blue Shirt M", "price": 1.0, "class": "Uniform NTI List"}, "OP-000540": {"name": "Mens Blue Shirt XL", "price": 1.0, "class": "Uniform NTI List"}, "OP-000536": {"name": "Mens Blue Shirt XS", "price": 1.0, "class": "Uniform NTI List"}, "OP-000535": {"name": "Mens Blue Shirt XXS", "price": 1.0, "class": "Uniform NTI List"}, "OP-000518": {"name": "Mens Navy Pant 28", "price": 1.0, "class": "Uniform NTI List"}, "OP-000519": {"name": "Mens Navy Pant 30", "price": 1.0, "class": "Uniform NTI List"}, "OP-000520": {"name": "Mens Navy Pant 32", "price": 1.0, "class": "Uniform NTI List"}, "OP-000521": {"name": "Mens Navy Pant 34", "price": 1.0, "class": "Uniform NTI List"}, "OP-000522": {"name": "Mens Navy Pant 36", "price": 1.0, "class": "Uniform NTI List"}, "OP-000523": {"name": "Mens Navy Pant 38", "price": 1.0, "class": "Uniform NTI List"}, "OP-000524": {"name": "Mens Navy Pant 40", "price": 1.0, "class": "Uniform NTI List"}, "621-UNF00062-01": {"name": "Mens sweater", "price": 1.0, "class": "Uniform NTI List"}, "621-SHS00035-01": {"name": "Scarf", "price": 1.0, "class": "Uniform NTI List"}, "621-ADMW0138-01": {"name": "Tee shirt - Men", "price": 1.0, "class": "Uniform NTI List"}, "621-ADMW0139-01": {"name": "Tee shirt - Women", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0187-01": {"name": "Trainee Badge", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0297-01": {"name": "Uniform Scarves-999", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0274-01": {"name": "Women Black Shirts-LRG", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0273-01": {"name": "Women Black Shirts-MDM", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0272-01": {"name": "Women Black Shirts-SML", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0270-01": {"name": "Women Black Shirts-XXS", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0271-01": {"name": "Women Black Shirts-XS", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0275-01": {"name": "Women Black Shirts-XLG", "price": 1.0, "class": "Uniform NTI List"}, "OP-000766": {"name": "Women Blazer Navy L", "price": 1.0, "class": "Uniform NTI List"}, "OP-000765": {"name": "Women Blazer Navy M", "price": 1.0, "class": "Uniform NTI List"}, "OP-000764": {"name": "Women Blazer Navy S", "price": 1.0, "class": "Uniform NTI List"}, "OP-000774": {"name": "Women Blue & White YD shirt", "price": 1.0, "class": "Uniform NTI List"}, "OP-000776": {"name": "Women Brown & White YD shirt", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0156-01": {"name": "Women Pant", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0541-01": {"name": "Women Pants XLG", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0289-01": {"name": "Women Pants-LRG", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0288-01": {"name": "Women Pants-MDM", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0287-01": {"name": "Women Pants-SML", "price": 1.0, "class": "Uniform NTI List"}, "631-ADMN0286-01": {"name": "Women Pants-XS", "price": 1.0, "class": "Uniform NTI List"}, "OP-000691": {"name": "Women Scarf Beige", "price": 1.0, "class": "Uniform NTI List"}, "OP-000692": {"name": "Women Scarf Navy Blue", "price": 1.0, "class": "Uniform NTI List"}, "621-SHS00032-01": {"name": "Women Shirt", "price": 1.0, "class": "Uniform NTI List"}, "621-SHS00027-01": {"name": "Women Shoes", "price": 1.0, "class": "Uniform NTI List"}, "OP-000364": {"name": "Women Shoes 37", "price": 1.0, "class": "Uniform NTI List"}, "621-SHS00028-01": {"name": "Women Socks", "price": 1.0, "class": "Uniform NTI List"}, "OP-000528": {"name": "Womens Black Pant L", "price": 1.0, "class": "Uniform NTI List"}, "OP-000527": {"name": "Womens Black Pant M", "price": 1.0, "class": "Uniform NTI List"}, "OP-000526": {"name": "Womens Black Pant S", "price": 1.0, "class": "Uniform NTI List"}, "OP-000529": {"name": "Womens Black Pant XL", "price": 1.0, "class": "Uniform NTI List"}, "OP-000545": {"name": "Womens Blue Shirt L", "price": 1.0, "class": "Uniform NTI List"}, "OP-000544": {"name": "Womens Blue Shirt M", "price": 1.0, "class": "Uniform NTI List"}, "OP-000546": {"name": "Womens Blue Shirt XL", "price": 1.0, "class": "Uniform NTI List"}, "OP-000542": {"name": "Womens Blue Shirt XS", "price": 1.0, "class": "Uniform NTI List"}, "OP-000541": {"name": "Womens Blue Shirt XXS", "price": 1.0, "class": "Uniform NTI List"}, "OP-000533": {"name": "Womens Navy Pant L", "price": 1.0, "class": "Uniform NTI List"}, "OP-000532": {"name": "Womens Navy Pant M", "price": 1.0, "class": "Uniform NTI List"}, "OP-000534": {"name": "Womens Navy Pant XL", "price": 1.0, "class": "Uniform NTI List"}, "OP-000530": {"name": "Womens Navy Pant XS", "price": 1.0, "class": "Uniform NTI List"}};
+let NTI = { ...DEFAULT_NTI };
+
+// ===================== CONFIG =====================
 const STORE_NAMES = {
   "S4005GUJ": "Satellite Town, Gujranwala",
   "S4009RHW": "Gujranwala Rahwali store",
@@ -235,88 +645,137 @@ const STORE_NAMES = {
   "S4021MBH2": "Jail Road Mandi Bahauddin-02 Store"
 };
 
-const DB_NAME = "NTIDemandDB";
-const DB_VERSION = 1;
-let db = null;
+const ADMIN_DEFAULT = { username: "talha.mahmood", password: "Faster@123", name: "Talha Mahmood", role: "admin" };
 
-function openDB() {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
-    req.onerror = () => reject(req.error);
-    req.onsuccess = () => { db = req.result; resolve(db); };
-    req.onupgradeneeded = (e) => {
-      const d = e.target.result;
-      if (!d.objectStoreNames.contains("uploads")) {
-        const store = d.createObjectStore("uploads", { keyPath: "id", autoIncrement: true });
-        store.createIndex("storeId", "storeId", { unique: false });
-        store.createIndex("timestamp", "timestamp", { unique: false });
-      }
-    };
-  });
+// ===================== STATE =====================
+let currentUser = null;
+let currentParsed = null;
+
+// ===================== STORAGE HELPERS =====================
+function getUsers() {
+  const raw = localStorage.getItem("nti_users_v2");
+  if (raw) return JSON.parse(raw);
+  const users = [ADMIN_DEFAULT];
+  localStorage.setItem("nti_users_v2", JSON.stringify(users));
+  return users;
+}
+function saveUsers(users) { localStorage.setItem("nti_users_v2", JSON.stringify(users)); }
+
+function getSession() {
+  const raw = sessionStorage.getItem("nti_session_v2");
+  return raw ? JSON.parse(raw) : null;
+}
+function setSession(user) { sessionStorage.setItem("nti_session_v2", JSON.stringify(user)); }
+function clearSession() { sessionStorage.removeItem("nti_session_v2"); }
+
+function loadNTI() {
+  const raw = localStorage.getItem("nti_db_v2");
+  if (raw) NTI = JSON.parse(raw);
+}
+function saveNTI(data) { localStorage.setItem("nti_db_v2", JSON.stringify(data)); }
+
+function getUploads() {
+  return JSON.parse(localStorage.getItem("nti_uploads_v2") || "[]").sort((a, b) => b.timestamp - a.timestamp);
+}
+function saveUploads(uploads) { localStorage.setItem("nti_uploads_v2", JSON.stringify(uploads)); }
+
+// ===================== INIT =====================
+loadNTI();
+
+const saved = getSession();
+if (saved) {
+  const users = getUsers();
+  const found = users.find(u => u.username === saved.username);
+  if (found) loginSuccess(found);
 }
 
-function saveUpload(data) {
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(["uploads"], "readwrite");
-    const store = tx.objectStore("uploads");
-    const req = store.add(data);
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
+// ===================== LOGIN =====================
+function doLogin() {
+  const userIn = document.getElementById("loginUser").value.trim().toLowerCase();
+  const passIn = document.getElementById("loginPass").value;
+  const errBox = document.getElementById("loginError");
+  if (!userIn || !passIn) {
+    errBox.textContent = "Please enter both username and password.";
+    errBox.classList.add("show");
+    return;
+  }
+  const users = getUsers();
+  const found = users.find(u => u.username === userIn && u.password === passIn);
+  if (found) {
+    errBox.classList.remove("show");
+    setSession(found);
+    loginSuccess(found);
+  } else {
+    errBox.textContent = "Invalid username or password.";
+    errBox.classList.add("show");
+  }
 }
 
-function getAllUploads() {
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(["uploads"], "readonly");
-    const store = tx.objectStore("uploads");
-    const req = store.index("timestamp").openCursor(null, "prev");
-    const results = [];
-    req.onsuccess = (e) => {
-      const cursor = e.target.result;
-      if (cursor) { results.push(cursor.value); cursor.continue(); }
-      else resolve(results);
-    };
-    req.onerror = () => reject(req.error);
-  });
+function loginSuccess(user) {
+  currentUser = user;
+  document.getElementById("loginPage").classList.add("hidden");
+  document.getElementById("app").classList.remove("hidden");
+
+  document.getElementById("sidebarUserName").textContent = user.name;
+  document.getElementById("sidebarUserRole").textContent = user.role === "admin" ? "Administrator" : "Store User";
+  document.getElementById("topbarUserName").textContent = user.name;
+  document.getElementById("userAvatar").textContent = user.name.charAt(0).toUpperCase();
+  document.getElementById("topbarBadge").textContent = user.role === "admin" ? "Admin" : "User";
+  document.getElementById("topbarBadge").className = "badge badge-" + user.role;
+
+  if (user.role === "admin") {
+    document.querySelectorAll(".admin-only").forEach(el => el.classList.remove("hidden"));
+  }
+
+  navTo("upload");
+  renderHistory();
+  renderUsers();
+  updateDBStats();
 }
 
-function getUpload(id) {
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(["uploads"], "readonly");
-    const store = tx.objectStore("uploads");
-    const req = store.get(Number(id));
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
+function doLogout() {
+  clearSession();
+  currentUser = null;
+  document.getElementById("app").classList.add("hidden");
+  document.getElementById("loginPage").classList.remove("hidden");
+  document.getElementById("loginUser").value = "";
+  document.getElementById("loginPass").value = "";
+  document.getElementById("loginError").classList.remove("show");
+  document.querySelectorAll(".admin-only").forEach(el => el.classList.add("hidden"));
+  document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
 }
 
-function deleteUpload(id) {
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(["uploads"], "readwrite");
-    const store = tx.objectStore("uploads");
-    const req = store.delete(Number(id));
-    req.onsuccess = () => resolve();
-    req.onerror = () => reject(req.error);
-  });
+document.getElementById("loginPass").addEventListener("keydown", e => { if (e.key === "Enter") doLogin(); });
+
+// ===================== NAVIGATION =====================
+function navTo(page) {
+  document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+  document.getElementById("page-" + page).classList.add("active");
+  document.querySelectorAll(".nav-item").forEach(a => a.classList.remove("active"));
+  const link = document.querySelector('.nav-item[data-page="' + page + '"]');
+  if (link) link.classList.add("active");
+
+  const titles = {
+    upload: "Upload Demand", summary: "Demand Summary", history: "Upload History",
+    compare: "Compare Uploads", users: "User Management", db: "NTI Database"
+  };
+  document.getElementById("pageTitle").textContent = titles[page] || "NTI Portal";
+
+  if (page === "compare") loadCompareOptions();
+  if (page === "history") renderHistory();
+  if (page === "users") renderUsers();
+  if (page === "db") updateDBStats();
 }
 
+// ===================== ALERTS =====================
 function showAlert(msg, type) {
   const box = document.getElementById("alertBox");
   box.textContent = msg;
-  box.className = "alert alert-" + type;
-  box.style.display = "block";
-  setTimeout(() => { box.style.display = "none"; }, 5000);
+  box.className = "alert alert-" + type + " show";
+  setTimeout(() => box.classList.remove("show"), 5000);
 }
 
-function switchTab(name) {
-  document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.tab === name));
-  document.getElementById("historyTab").classList.toggle("hidden", name !== "history");
-  document.getElementById("compareTab").classList.toggle("hidden", name !== "compare");
-  if (name === "compare") loadCompareOptions();
-}
-
-let currentParsed = null;
-
+// ===================== FILE UPLOAD =====================
 const dropzone = document.getElementById("dropzone");
 const fileInput = document.getElementById("fileInput");
 
@@ -335,6 +794,8 @@ async function handleFile(file) {
   if (!storeId) { showAlert("Please select a store first.", "error"); return; }
   document.getElementById("fileName").textContent = file.name;
   document.getElementById("fileName").style.display = "block";
+  document.getElementById("step2").classList.add("active");
+
   try {
     let rows;
     if (file.name.toLowerCase().endsWith(".csv")) {
@@ -371,6 +832,7 @@ function parseCSV(text) {
 
 function processRows(rows, filename, storeId) {
   if (!rows || rows.length < 2) { showAlert("File appears empty.", "error"); return; }
+
   let headerRow = -1, itemCol = -1, qtyCol = -1;
   for (let i = 0; i < Math.min(5, rows.length); i++) {
     const r = rows[i].map(c => String(c).toLowerCase().trim());
@@ -416,8 +878,8 @@ function processRows(rows, filename, storeId) {
   tbody.innerHTML = "";
   results.forEach((r, idx) => {
     const tr = document.createElement("tr");
-    if (idx % 2 === 1) tr.style.background = "var(--surface-muted)";
-    tr.innerHTML = `<td class="mono">${escapeHtml(r.itemNum)}</td><td>${escapeHtml(r.name)}</td><td class="text-center">${r.qty}</td><td class="text-right">${r.price.toFixed(2)}</td><td class="text-right" style="font-weight:500">${r.total.toFixed(2)}</td>`;
+    if (idx % 2 === 1) tr.style.background = "var(--surface-hover)";
+    tr.innerHTML = `<td class="mono">${esc(r.itemNum)}</td><td>${esc(r.name)}</td><td class="text-center">${r.qty}</td><td class="text-right">${r.price.toFixed(2)}</td><td class="text-right" style="font-weight:600">${r.total.toFixed(2)}</td>`;
     tbody.appendChild(tr);
   });
 
@@ -425,128 +887,137 @@ function processRows(rows, filename, storeId) {
   const nfList = document.getElementById("notFoundList");
   if (notFound.length > 0) {
     nfBox.style.display = "block";
-    nfList.innerHTML = notFound.map(n => `<span class="mono">${escapeHtml(n.itemNum)}</span>${n.name ? " (" + escapeHtml(n.name) + ")" : ""} x${n.qty}`).join(", ");
+    nfList.innerHTML = notFound.map(n => `<span class="mono">${esc(n.itemNum)}</span>${n.name ? " (" + esc(n.name) + ")" : ""} x${n.qty}`).join(", ");
   } else {
     nfBox.style.display = "none";
   }
 
-  document.getElementById("summaryCard").classList.remove("hidden");
+  document.getElementById("step3").classList.add("active");
+  document.getElementById("step4").classList.add("active");
+  navTo("summary");
 
   currentParsed = {
     storeId, storeName: STORE_NAMES[storeId], filename,
     label: document.getElementById("uploadLabel").value.trim() || filename,
     timestamp: Date.now(), dateStr: new Date().toLocaleString(),
-    totalItems, totalValue, uniqueSKUs, matched, results, notFound
+    totalItems, totalValue, uniqueSKUs, matched, results, notFound,
+    uploadedBy: currentUser ? currentUser.name : "Unknown"
   };
 }
 
-function escapeHtml(str) {
+function esc(str) {
   const div = document.createElement("div");
   div.textContent = str;
   return div.innerHTML;
 }
 
-document.getElementById("saveBtn").addEventListener("click", async () => {
+// ===================== SAVE =====================
+document.getElementById("saveBtn").addEventListener("click", () => {
   if (!currentParsed) return;
-  try {
-    await saveUpload(currentParsed);
-    showAlert("Saved to history successfully!", "success");
-    renderHistory();
-    document.getElementById("summaryCard").classList.add("hidden");
-    document.getElementById("fileName").style.display = "none";
-    document.getElementById("fileInput").value = "";
-    document.getElementById("uploadLabel").value = "";
-    currentParsed = null;
-  } catch (e) {
-    showAlert("Failed to save: " + e.message, "error");
-  }
-});
-
-document.getElementById("clearBtn").addEventListener("click", () => {
-  document.getElementById("summaryCard").classList.add("hidden");
+  const uploads = getUploads();
+  uploads.push(currentParsed);
+  saveUploads(uploads);
+  showAlert("Saved to history successfully!", "success");
+  currentParsed = null;
   document.getElementById("fileName").style.display = "none";
   document.getElementById("fileInput").value = "";
-  currentParsed = null;
+  document.getElementById("uploadLabel").value = "";
+  document.getElementById("storeSelect").value = "";
+  document.querySelectorAll(".step").forEach((s, i) => { if (i > 0) s.classList.remove("active"); });
+  navTo("upload");
 });
 
-async function renderHistory() {
-  const uploads = await getAllUploads();
+// ===================== HISTORY =====================
+function renderHistory() {
+  const uploads = getUploads();
   const container = document.getElementById("historyList");
   if (uploads.length === 0) {
-    container.innerHTML = `<p style="text-align:center;color:var(--text-quaternary);padding:32px 0;font-size:14px;">No uploads yet. Upload a demand request file to see it here.</p>`;
+    container.innerHTML = `
+      <div class="empty">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <div class="empty-title">No uploads yet</div>
+        <div class="empty-hint">Upload a demand request file to see it here.</div>
+      </div>`;
     return;
   }
-  container.innerHTML = uploads.map(u => `
-    <div class="history-item">
-      <div class="history-meta">
-        <div class="history-store">${escapeHtml(u.label || u.filename)}</div>
-        <div class="history-date">${escapeHtml(STORE_NAMES[u.storeId] || u.storeId)} &middot; ${escapeHtml(u.dateStr)}</div>
+  container.innerHTML = uploads.map((u, idx) => `
+    <div class="history-row">
+      <div class="history-info">
+        <div class="history-title">${esc(u.label || u.filename)}</div>
+        <div class="history-meta">${esc(STORE_NAMES[u.storeId] || u.storeId)} &middot; ${esc(u.dateStr)} &middot; by ${esc(u.uploadedBy || "—")}</div>
       </div>
       <div class="history-stats">
-        <div class="history-stat"><div class="history-stat-label">Items</div><div class="history-stat-value">${u.totalItems.toLocaleString()}</div></div>
-        <div class="history-stat"><div class="history-stat-label">Value</div><div class="history-stat-value">${u.totalValue.toLocaleString()}</div></div>
-        <div class="history-stat"><div class="history-stat-label">SKUs</div><div class="history-stat-value">${u.uniqueSKUs}</div></div>
+        <div class="history-stat"><div class="history-stat-val">${u.totalItems.toLocaleString()}</div><div class="history-stat-lbl">Items</div></div>
+        <div class="history-stat"><div class="history-stat-val">${u.totalValue.toLocaleString()}</div><div class="history-stat-lbl">Value</div></div>
+        <div class="history-stat"><div class="history-stat-val">${u.uniqueSKUs}</div><div class="history-stat-lbl">SKUs</div></div>
       </div>
-      <div class="history-actions">
-        <button class="btn btn-sm btn-secondary" onclick="viewUpload(${u.id})">View</button>
-        <button class="btn btn-sm btn-danger" onclick="deleteUploadEntry(${u.id})">Delete</button>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-sm btn-secondary" onclick="viewUpload(${idx})">View</button>
+        <button class="btn btn-sm btn-danger" onclick="deleteUploadEntry(${idx})">Delete</button>
       </div>
     </div>
   `).join("");
 }
 
-async function viewUpload(id) {
-  const u = await getUpload(id);
+function viewUpload(idx) {
+  const uploads = getUploads();
+  const u = uploads[idx];
   if (!u) return;
-  document.getElementById("viewModalTitle").textContent = (u.label || u.filename) + " — " + STORE_NAMES[u.storeId];
-  const rowsHtml = u.results.map((r, idx) => `
-    <tr style="${idx % 2 === 1 ? 'background:var(--surface-muted)' : ''}">
-      <td class="mono">${escapeHtml(r.itemNum)}</td><td>${escapeHtml(r.name)}</td><td class="text-center">${r.qty}</td>
-      <td class="text-right">${r.price.toFixed(2)}</td><td class="text-right" style="font-weight:500">${r.total.toFixed(2)}</td>
+  document.getElementById("viewModalTitle").textContent = (u.label || u.filename) + " — " + (STORE_NAMES[u.storeId] || u.storeId);
+  const rowsHtml = u.results.map((r, i) => `
+    <tr style="${i % 2 === 1 ? 'background:var(--surface-hover)' : ''}">
+      <td class="mono">${esc(r.itemNum)}</td><td>${esc(r.name)}</td><td class="text-center">${r.qty}</td>
+      <td class="text-right">${r.price.toFixed(2)}</td><td class="text-right" style="font-weight:600">${r.total.toFixed(2)}</td>
     </tr>
   `).join("");
   document.getElementById("viewModalBody").innerHTML = `
-    <div class="stats-grid" style="margin-bottom:16px;">
-      <div class="stat-box"><div class="stat-label">Total items</div><div class="stat-value">${u.totalItems.toLocaleString()}</div></div>
-      <div class="stat-box"><div class="stat-label">Total value</div><div class="stat-value">${u.totalValue.toLocaleString()}</div></div>
-      <div class="stat-box"><div class="stat-label">Unique SKUs</div><div class="stat-value">${u.uniqueSKUs}</div></div>
-      <div class="stat-box"><div class="stat-label">Matched</div><div class="stat-value">${u.matched}</div></div>
+    <div class="stats-row" style="margin-bottom:16px;">
+      <div class="stat-card" style="border-left:4px solid var(--primary);"><div class="stat-label">Total items</div><div class="stat-value">${u.totalItems.toLocaleString()}</div></div>
+      <div class="stat-card" style="border-left:4px solid var(--success);"><div class="stat-label">Total value</div><div class="stat-value">${u.totalValue.toLocaleString()}</div></div>
+      <div class="stat-card" style="border-left:4px solid var(--warning);"><div class="stat-label">Unique SKUs</div><div class="stat-value">${u.uniqueSKUs}</div></div>
+      <div class="stat-card" style="border-left:4px solid #6366f1;"><div class="stat-label">Matched</div><div class="stat-value">${u.matched}</div></div>
     </div>
-    <div style="overflow-x:auto;">
+    <div class="table-wrap">
       <table>
         <thead><tr><th>Item #</th><th>Product name</th><th class="text-center">Qty</th><th class="text-right">Unit price</th><th class="text-right">Line total</th></tr></thead>
         <tbody>${rowsHtml}</tbody>
       </table>
     </div>
-    ${u.notFound && u.notFound.length ? `<div class="alert alert-warning" style="display:block;margin-top:16px;"><strong>Not found:</strong> ${u.notFound.map(n => `<span class="mono">${escapeHtml(n.itemNum)}</span>${n.name ? " (" + escapeHtml(n.name) + ")" : ""} x${n.qty}`).join(", ")}</div>` : ""}
+    ${u.notFound && u.notFound.length ? `<div class="alert alert-warning show" style="margin-top:16px;"><strong>Not found in NTI DB:</strong> ${u.notFound.map(n => `<span class="mono">${esc(n.itemNum)}</span>${n.name ? " (" + esc(n.name) + ")" : ""} x${n.qty}`).join(", ")}</div>` : ""}
   `;
   document.getElementById("viewModal").classList.remove("hidden");
 }
 
 function closeModal() { document.getElementById("viewModal").classList.add("hidden"); }
 
-async function deleteUploadEntry(id) {
+function deleteUploadEntry(idx) {
   if (!confirm("Delete this upload from history?")) return;
-  await deleteUpload(id);
+  const uploads = getUploads();
+  uploads.splice(idx, 1);
+  saveUploads(uploads);
   renderHistory();
   showAlert("Deleted from history.", "success");
 }
 
-async function loadCompareOptions() {
-  const uploads = await getAllUploads();
-  const html = `<option value="">-- Choose --</option>` + uploads.map(u =>
-    `<option value="${u.id}">${escapeHtml(u.label || u.filename)} — ${escapeHtml(STORE_NAMES[u.storeId])} (${new Date(u.timestamp).toLocaleDateString()})</option>`
+// ===================== COMPARE =====================
+function loadCompareOptions() {
+  const uploads = getUploads();
+  const html = `<option value="">-- Choose --</option>` + uploads.map((u, idx) =>
+    `<option value="${idx}">${esc(u.label || u.filename)} — ${esc(STORE_NAMES[u.storeId])} (${new Date(u.timestamp).toLocaleDateString()})</option>`
   ).join("");
   document.getElementById("compareA").innerHTML = html;
   document.getElementById("compareB").innerHTML = html;
 }
 
-document.getElementById("runCompareBtn").addEventListener("click", async () => {
-  const idA = document.getElementById("compareA").value;
-  const idB = document.getElementById("compareB").value;
-  if (!idA || !idB) { showAlert("Select both uploads to compare.", "error"); return; }
-  if (idA === idB) { showAlert("Select two different uploads.", "error"); return; }
-  const [a, b] = await Promise.all([getUpload(Number(idA)), getUpload(Number(idB))]);
+document.getElementById("runCompareBtn").addEventListener("click", () => {
+  const idxA = document.getElementById("compareA").value;
+  const idxB = document.getElementById("compareB").value;
+  if (idxA === "" || idxB === "") { showAlert("Select both uploads to compare.", "error"); return; }
+  if (idxA === idxB) { showAlert("Select two different uploads.", "error"); return; }
+
+  const uploads = getUploads();
+  const a = uploads[Number(idxA)];
+  const b = uploads[Number(idxB)];
   if (!a || !b) { showAlert("Could not load uploads.", "error"); return; }
 
   const allItems = new Set([...a.results.map(r => r.itemNum), ...b.results.map(r => r.itemNum)]);
@@ -560,46 +1031,161 @@ document.getElementById("runCompareBtn").addEventListener("click", async () => {
     const qtyB = rb ? rb.qty : 0;
     const diff = qtyB - qtyA;
     const name = (ra || rb).name;
-    const diffClass = diff > 0 ? "positive" : diff < 0 ? "negative" : "";
+    const diffClass = diff > 0 ? "pos" : diff < 0 ? "neg" : "";
     const diffSign = diff > 0 ? "+" : "";
     rows += `
       <div class="compare-row">
-        <span style="font-weight:500">${escapeHtml(name)} <span class="mono" style="color:var(--text-quaternary)">${escapeHtml(item)}</span></span>
+        <span style="font-weight:600">${esc(name)} <span class="mono" style="color:var(--text-muted)">${esc(item)}</span></span>
         <span class="compare-diff ${diffClass}">${diff !== 0 ? diffSign + diff : "—"}</span>
       </div>
-      <div style="display:flex;justify-content:space-between;padding:2px 0 8px;font-size:12px;color:var(--text-quaternary);">
-        <span>${escapeHtml(a.label || a.filename)}: ${qtyA}</span>
-        <span>${escapeHtml(b.label || b.filename)}: ${qtyB}</span>
+      <div style="display:flex;justify-content:space-between;padding:2px 0 10px;font-size:12px;color:var(--text-muted);">
+        <span>${esc(a.label || a.filename)}: ${qtyA}</span>
+        <span>${esc(b.label || b.filename)}: ${qtyB}</span>
       </div>
     `;
   }
 
   document.getElementById("compareResult").innerHTML = `
     <div class="compare-grid">
-      <div class="compare-col">
-        <div class="compare-header">${escapeHtml(a.label || a.filename)}<br><span style="font-size:12px;color:var(--text-tertiary);font-weight:400">${escapeHtml(STORE_NAMES[a.storeId])} &middot; ${new Date(a.timestamp).toLocaleDateString()}</span></div>
-        <div class="compare-row"><span>Total items</span><span style="font-weight:600">${a.totalItems.toLocaleString()}</span></div>
-        <div class="compare-row"><span>Total value</span><span style="font-weight:600">${a.totalValue.toLocaleString()}</span></div>
-        <div class="compare-row"><span>Unique SKUs</span><span style="font-weight:600">${a.uniqueSKUs}</span></div>
+      <div class="compare-card">
+        <div class="compare-card-header">${esc(a.label || a.filename)}<small style="display:block;font-size:12px;color:var(--text-muted);font-weight:400;margin-top:2px;">${esc(STORE_NAMES[a.storeId])} &middot; ${new Date(a.timestamp).toLocaleDateString()}</small></div>
+        <div class="compare-row"><span>Total items</span><span style="font-weight:700">${a.totalItems.toLocaleString()}</span></div>
+        <div class="compare-row"><span>Total value</span><span style="font-weight:700">${a.totalValue.toLocaleString()}</span></div>
+        <div class="compare-row"><span>Unique SKUs</span><span style="font-weight:700">${a.uniqueSKUs}</span></div>
       </div>
-      <div class="compare-col">
-        <div class="compare-header">${escapeHtml(b.label || b.filename)}<br><span style="font-size:12px;color:var(--text-tertiary);font-weight:400">${escapeHtml(STORE_NAMES[b.storeId])} &middot; ${new Date(b.timestamp).toLocaleDateString()}</span></div>
-        <div class="compare-row"><span>Total items</span><span style="font-weight:600">${b.totalItems.toLocaleString()}</span></div>
-        <div class="compare-row"><span>Total value</span><span style="font-weight:600">${b.totalValue.toLocaleString()}</span></div>
-        <div class="compare-row"><span>Unique SKUs</span><span style="font-weight:600">${b.uniqueSKUs}</span></div>
+      <div class="compare-card">
+        <div class="compare-card-header">${esc(b.label || b.filename)}<small style="display:block;font-size:12px;color:var(--text-muted);font-weight:400;margin-top:2px;">${esc(STORE_NAMES[b.storeId])} &middot; ${new Date(b.timestamp).toLocaleDateString()}</small></div>
+        <div class="compare-row"><span>Total items</span><span style="font-weight:700">${b.totalItems.toLocaleString()}</span></div>
+        <div class="compare-row"><span>Total value</span><span style="font-weight:700">${b.totalValue.toLocaleString()}</span></div>
+        <div class="compare-row"><span>Unique SKUs</span><span style="font-weight:700">${b.uniqueSKUs}</span></div>
       </div>
     </div>
-    <div class="card" style="margin-top:16px;">
-      <div class="card-title">Item-level quantity comparison</div>
-      ${rows || "<p style=color:var(--text-quaternary)>No overlapping items.</p>"}
+    <div class="card" style="margin-top:20px;">
+      <div class="card-header"><div class="card-title">Item-level quantity comparison</div></div>
+      <div class="card-body">${rows || '<p style="color:var(--text-muted)">No overlapping items.</p>'}</div>
     </div>
   `;
 });
 
-openDB().then(() => { renderHistory(); }).catch(err => {
-  console.error("DB init failed:", err);
-  showAlert("Browser storage not available. History features disabled.", "warning");
-});
+// ===================== USER MANAGEMENT =====================
+function renderUsers() {
+  const users = getUsers();
+  const container = document.getElementById("usersList");
+  container.innerHTML = users.map((u, idx) => `
+    <div class="user-row">
+      <div class="user-info">
+        <div class="user-avatar-lg">${u.name.charAt(0).toUpperCase()}</div>
+        <div>
+          <div class="user-name">${esc(u.name)} <span class="badge badge-${u.role}" style="margin-left:6px;">${u.role}</span></div>
+          <div class="user-role">@${esc(u.username)}</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;">
+        ${u.username !== "talha.mahmood" ? `<button class="btn btn-sm btn-danger" onclick="deleteUser(${idx})">Delete</button>` : '<span style="font-size:12px;color:var(--text-muted);padding:6px 0;">Super Admin</span>'}
+      </div>
+    </div>
+  `).join("");
+}
+
+function showAddUserModal() {
+  document.getElementById("addUserModal").classList.remove("hidden");
+  document.getElementById("newUserName").value = "";
+  document.getElementById("newUserUser").value = "";
+  document.getElementById("newUserPass").value = "";
+  document.getElementById("newUserRole").value = "user";
+}
+function closeAddUserModal() { document.getElementById("addUserModal").classList.add("hidden"); }
+
+function addUser() {
+  const name = document.getElementById("newUserName").value.trim();
+  const username = document.getElementById("newUserUser").value.trim().toLowerCase();
+  const password = document.getElementById("newUserPass").value;
+  const role = document.getElementById("newUserRole").value;
+
+  if (!name || !username || !password) { showAlert("Please fill all fields.", "error"); return; }
+  if (password.length < 6) { showAlert("Password must be at least 6 characters.", "error"); return; }
+
+  const users = getUsers();
+  if (users.some(u => u.username === username)) { showAlert("Username already exists.", "error"); return; }
+
+  users.push({ name, username, password, role });
+  saveUsers(users);
+  closeAddUserModal();
+  renderUsers();
+  showAlert("User created successfully!", "success");
+}
+
+function deleteUser(idx) {
+  const users = getUsers();
+  if (users[idx].username === "talha.mahmood") { showAlert("Cannot delete super admin.", "error"); return; }
+  if (!confirm("Delete this user?")) return;
+  users.splice(idx, 1);
+  saveUsers(users);
+  renderUsers();
+  showAlert("User deleted.", "success");
+}
+
+// ===================== DB PICKER =====================
+async function handleDBFile(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const status = document.getElementById("dbStatus");
+  status.textContent = "Parsing file...";
+
+  try {
+    let rows;
+    if (file.name.toLowerCase().endsWith(".csv")) {
+      const text = await file.text();
+      rows = parseCSV(text);
+    } else {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(new Uint8Array(buf), { type: "array" });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+    }
+
+    let headerRow = -1, itemCol = -1, nameCol = -1, classCol = -1, priceCol = -1;
+    for (let i = 0; i < Math.min(5, rows.length); i++) {
+      const r = rows[i].map(c => String(c).toLowerCase().trim());
+      const itemIdx = r.findIndex(c => c.includes("item") && (c.includes("number") || c.includes("#")));
+      const nameIdx = r.findIndex(c => c.includes("product") && c.includes("name"));
+      const classIdx = r.findIndex(c => c.includes("classification"));
+      const priceIdx = r.findIndex(c => c.includes("price"));
+      if (itemIdx >= 0) { headerRow = i; itemCol = itemIdx; nameCol = nameIdx; classCol = classIdx; priceCol = priceIdx; break; }
+    }
+    if (headerRow < 0) { status.textContent = "Could not find header row."; return; }
+
+    const newDB = {};
+    let count = 0;
+    for (let i = headerRow + 1; i < rows.length; i++) {
+      const row = rows[i];
+      if (!row[itemCol]) continue;
+      const itemNum = String(row[itemCol]).trim();
+      const name = nameCol >= 0 ? String(row[nameCol] || "").trim() : "";
+      const cls = classCol >= 0 ? String(row[classCol] || "").trim() : "";
+      const price = priceCol >= 0 ? parseFloat(row[priceCol]) || 1 : 1;
+      if (!itemNum) continue;
+      newDB[itemNum] = { name, price, class: cls };
+      count++;
+    }
+
+    NTI = newDB;
+    saveNTI(newDB);
+    updateDBStats();
+    status.innerHTML = `<span style="color:var(--success);font-weight:600;">Success!</span> Loaded ${count} items into NTI database.`;
+    showAlert("NTI database updated successfully!", "success");
+  } catch (err) {
+    status.innerHTML = `<span style="color:var(--danger);font-weight:600;">Error:</span> ${err.message}`;
+  }
+  input.value = "";
+}
+
+function updateDBStats() {
+  const items = Object.keys(NTI).length;
+  const classes = new Set(Object.values(NTI).map(i => i.class)).size;
+  document.getElementById("dbTotalItems").textContent = items;
+  document.getElementById("dbCategories").textContent = classes;
+}
 </script>
 </body>
 </html>
