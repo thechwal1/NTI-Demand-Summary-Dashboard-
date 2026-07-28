@@ -766,7 +766,7 @@ function doLogin() {
     setSession(found);
     loginSuccess(found);
   } else {
-    errBox.textContent = "Invalid username or password.";
+    errBox.textContent = `Invalid username or password. (Tried username: '${userIn}', DB contains: ${users.map(u => u.username).join(', ')})`;
     errBox.classList.add("show");
   }
 }
