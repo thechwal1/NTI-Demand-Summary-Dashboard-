@@ -691,7 +691,9 @@ async function apiCall(action, payload = {}) {
 function getUsers() { return STATE.users; }
 async function saveUsers(users) { 
   STATE.users = users;
-  await apiCall("saveUsers", { users }); 
+  const res = await apiCall("saveUsers", { users });
+  if (res.error) throw new Error(res.error);
+  return res;
 }
 
 function getSession() {
@@ -704,13 +706,17 @@ function clearSession() { sessionStorage.removeItem("nti_session_v2"); }
 async function saveNTI(data) { 
   STATE.nti = data;
   NTI = data;
-  await apiCall("saveNTI", { nti: data }); 
+  const res = await apiCall("saveNTI", { nti: data });
+  if (res.error) throw new Error(res.error);
+  return res;
 }
 
 function getUploads() { return STATE.uploads; }
 async function saveUploads(uploads) { 
   STATE.uploads = uploads;
-  await apiCall("saveUploads", { uploads }); 
+  const res = await apiCall("saveUploads", { uploads });
+  if (res.error) throw new Error(res.error);
+  return res;
 }
 
 // ===================== INIT =====================
