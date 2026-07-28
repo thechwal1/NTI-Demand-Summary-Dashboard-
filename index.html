@@ -327,7 +327,6 @@ tbody tr:last-child td { border-bottom: none; }
         <input type="password" id="loginPass" class="form-control" placeholder="Enter password" autocomplete="current-password">
       </div>
       <div id="loginError" class="alert alert-error" style="margin-bottom:12px;"></div>
-      <div id="debugPanel" style="font-size:11px;color:#6b7280;margin-bottom:12px;max-height:120px;overflow:auto;background:#f3f4f6;padding:8px;border-radius:6px;font-family:monospace;"></div>
       <button class="btn btn-primary btn-block" onclick="doLogin()">Sign in</button>
     </div>
   </div>
@@ -657,16 +656,10 @@ let currentUser = null;
 let currentParsed = null;
 
 // ===================== STORAGE HELPERS =====================
-// ===================== APPWRITE CONFIG =====================
-// REPLACE THESE 2 VALUES AFTER CREATING YOUR APPWRITE PROJECT
-const APPWRITE_ENDPOINT = 'https://sapphirenti.appwrite.network/v1';
-const APPWRITE_PROJECT = '6a69132000319ef30d2e';
-const DATABASE_ID = '6a69143600145a8edc59';
-const COLLECTION_USERS = 'users';
-const COLLECTION_UPLOADS = 'uploads';
-const COLLECTION_NTI = 'nti';
-
-console.log("[NTI Portal] Appwrite version loaded");
+// ===================== LOCAL STORAGE CONFIG =====================
+const LS_KEY_USERS = 'nti_users';
+const LS_KEY_UPLOADS = 'nti_uploads';
+const LS_KEY_NTI = 'nti_database';
 
 let STATE = {
   users: [ADMIN_DEFAULT],
@@ -674,51 +667,25 @@ let STATE = {
   nti: { ...DEFAULT_NTI }
 };
 
-// ===================== APPWRITE HELPERS =====================
-async function awRequest(method, path, body = null) {
-  const url = APPWRITE_ENDPOINT + path;
-  const headers = {
-    'Content-Type': 'application/json',
-    'X-Appwrite-Project': APPWRITE_PROJECT
-  };
-  const opts = { method, headers };
-  if (body) opts.body = JSON.stringify(body);
-
-  debugLog('[Appwrite] >>> ' + method + ' ' + path);
-  if (body) debugLog('[Appwrite] BODY: ' + JSON.stringify(body).slice(0, 150));
-
+// ===================== LOCAL STORAGE HELPERS =====================
+function lsGet(key, fallback) {
   try {
-    const res = await fetch(url, opts);
-    const text = await res.text();
-    debugLog('[Appwrite] <<< Status: ' + res.status + ' | ' + text.slice(0, 200));
-    try { return JSON.parse(text); } catch { return {error: text.slice(0, 500)}; }
-  } catch (networkErr) {
-    debugLog('[Appwrite] NETWORK ERROR: ' + networkErr.message);
-    return {error: 'Network error: ' + networkErr.message};
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch (e) {
+    console.error('localStorage read error:', e);
+    return fallback;
   }
 }
 
-async function awListAll(collectionId) {
-  const all = [];
-  let offset = 0;
-  const limit = 100;
-  while (true) {
-    const res = await awRequest('GET', `/databases/${DATABASE_ID}/collections/${collectionId}/documents?limit=${limit}&offset=${offset}`);
-    if (res.error) { console.error('[Appwrite] list error:', res.error); break; }
-    if (!res.documents) break;
-    all.push(...res.documents);
-    if (res.documents.length < limit) break;
-    offset += limit;
+function lsSet(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+    return true;
+  } catch (e) {
+    console.error('localStorage write error:', e);
+    return false;
   }
-  return all;
-}
-
-async function awCreate(collectionId, data, docId = 'unique()') {
-  return awRequest('POST', `/databases/${DATABASE_ID}/collections/${collectionId}/documents?documentId=${docId}`, data);
-}
-
-async function awDelete(collectionId, docId) {
-  return awRequest('DELETE', `/databases/${DATABASE_ID}/collections/${collectionId}/documents/${docId}`);
 }
 
 // ===================== DATA LAYER =====================
@@ -726,12 +693,7 @@ function getUsers() { return STATE.users; }
 
 async function saveUsers(users) {
   STATE.users = users;
-  const existing = await awListAll(COLLECTION_USERS);
-  for (const doc of existing) await awDelete(COLLECTION_USERS, doc.$id);
-  for (const u of users) {
-    const res = await awCreate(COLLECTION_USERS, u);
-    if (res.error) throw new Error(res.error);
-  }
+  lsSet(LS_KEY_USERS, users);
   return {success: true};
 }
 
@@ -739,38 +701,14 @@ function getUploads() { return STATE.uploads; }
 
 async function saveUploads(uploads) {
   STATE.uploads = uploads;
-  const existing = await awListAll(COLLECTION_UPLOADS);
-  for (const doc of existing) await awDelete(COLLECTION_UPLOADS, doc.$id);
-  for (const u of uploads) {
-    const payload = {
-      storeId: u.storeId,
-      storeName: u.storeName,
-      filename: u.filename,
-      label: u.label || '',
-      uploadedBy: u.uploadedBy || '',
-      totalItems: u.totalItems,
-      totalValue: u.totalValue,
-      uniqueSKUs: u.uniqueSKUs,
-      matched: u.matched,
-      resultsJSON: JSON.stringify(u.results || []),
-      notFoundJSON: JSON.stringify(u.notFound || []),
-      timestamp: u.timestamp
-    };
-    const res = await awCreate(COLLECTION_UPLOADS, payload);
-    if (res.error) throw new Error(res.error);
-  }
+  lsSet(LS_KEY_UPLOADS, uploads);
   return {success: true};
 }
 
 async function saveNTI(data) {
   STATE.nti = data;
   NTI = data;
-  const existing = await awListAll(COLLECTION_NTI);
-  for (const doc of existing) await awDelete(COLLECTION_NTI, doc.$id);
-  for (const [itemNum, info] of Object.entries(data)) {
-    const res = await awCreate(COLLECTION_NTI, { itemNum, name: info.name, price: info.price, class: info.class });
-    if (res.error) throw new Error(res.error);
-  }
+  lsSet(LS_KEY_NTI, data);
   return {success: true};
 }
 
@@ -782,88 +720,50 @@ function setSession(user) { sessionStorage.setItem("nti_session_v2", JSON.string
 function clearSession() { sessionStorage.removeItem("nti_session_v2"); }
 
 // ===================== INIT =====================
-function debugLog(msg) {
-  console.log(msg);
-  const panel = document.getElementById("debugPanel");
-  if (panel) panel.innerHTML += msg + "<br>";
-}
-
 async function initApp() {
   const loginBtn = document.querySelector("#loginPage .btn-primary");
   const errBox = document.getElementById("loginError");
-  debugLog("[initApp] Starting...");
 
   if (loginBtn) {
-    loginBtn.innerHTML = `Loading DB...`;
+    loginBtn.innerHTML = `Loading...`;
     loginBtn.disabled = true;
   }
 
-  // Safety fallback: force-enable button after 10s
-  setTimeout(() => {
-    if (loginBtn && loginBtn.disabled) {
-      loginBtn.textContent = "Sign in";
-      loginBtn.disabled = false;
-      if (errBox) {
-        errBox.textContent = "Server not responding. Please try again in a moment.";
-        errBox.classList.add("show");
-      }
-    }
-  }, 10000);
-
   try {
-    debugLog("[initApp] Loading from Appwrite...");
+    console.log("[initApp] Loading from localStorage...");
 
     // Load users
-    const userDocs = await awListAll(COLLECTION_USERS);
-    debugLog("[initApp] userDocs: " + userDocs.length);
-    if (userDocs.length > 0) {
-      STATE.users = userDocs.map(d => ({name: d.name, username: d.username, password: d.password, role: d.role}));
+    const savedUsers = lsGet(LS_KEY_USERS, null);
+    if (savedUsers && Array.isArray(savedUsers) && savedUsers.length > 0) {
+      STATE.users = savedUsers;
+      console.log("[initApp] Loaded", savedUsers.length, "users from localStorage");
     } else {
-      debugLog("[initApp] Seeding default admin...");
-      await saveUsers(STATE.users);
+      console.log("[initApp] Seeding default admin...");
+      lsSet(LS_KEY_USERS, STATE.users);
     }
 
     // Load uploads
-    const uploadDocs = await awListAll(COLLECTION_UPLOADS);
-    debugLog("[initApp] uploadDocs: " + uploadDocs.length);
-    STATE.uploads = uploadDocs.map(d => ({
-      timestamp: d.timestamp,
-      storeId: d.storeId,
-      storeName: d.storeName,
-      filename: d.filename,
-      label: d.label,
-      uploadedBy: d.uploadedBy,
-      totalItems: d.totalItems,
-      totalValue: d.totalValue,
-      uniqueSKUs: d.uniqueSKUs,
-      matched: d.matched,
-      results: JSON.parse(d.resultsJSON || '[]'),
-      notFound: JSON.parse(d.notFoundJSON || '[]')
-    })).sort((a, b) => b.timestamp - a.timestamp);
+    const savedUploads = lsGet(LS_KEY_UPLOADS, null);
+    if (savedUploads && Array.isArray(savedUploads)) {
+      STATE.uploads = savedUploads.sort((a, b) => b.timestamp - a.timestamp);
+      console.log("[initApp] Loaded", savedUploads.length, "uploads from localStorage");
+    }
 
     // Load NTI
-    const ntiDocs = await awListAll(COLLECTION_NTI);
-    debugLog("[initApp] ntiDocs: " + ntiDocs.length);
-    if (ntiDocs.length > 0) {
-      const nti = {};
-      for (const d of ntiDocs) nti[d.itemNum] = {name: d.name, price: d.price, class: d.class};
-      STATE.nti = nti;
-      NTI = nti;
-      debugLog("[initApp] Loaded " + ntiDocs.length + " NTI items");
+    const savedNTI = lsGet(LS_KEY_NTI, null);
+    if (savedNTI && Object.keys(savedNTI).length > 0) {
+      STATE.nti = savedNTI;
+      NTI = savedNTI;
+      console.log("[initApp] Loaded", Object.keys(savedNTI).length, "NTI items from localStorage");
     } else {
-      debugLog("[initApp] Seeding NTI database (239 items)...");
-      const seedRes = await saveNTI(NTI);
-      if (seedRes.error) {
-        debugLog("[initApp] NTI SEED FAILED: " + seedRes.error);
-      } else {
-        debugLog("[initApp] NTI seeded OK");
-      }
+      console.log("[initApp] Seeding default NTI database...");
+      lsSet(LS_KEY_NTI, NTI);
     }
 
   } catch (err) {
-    debugLog("[initApp] ERROR: " + err.message); console.error(err);
+    console.error("[initApp] Error:", err);
     if (errBox) {
-      errBox.textContent = "Connection error. Please refresh and try again.";
+      errBox.textContent = "Load error. Please refresh.";
       errBox.classList.add("show");
     }
   }
@@ -873,13 +773,6 @@ async function initApp() {
     loginBtn.disabled = false;
   }
 
-  // Clear error message if init succeeded
-  if (errBox && !errBox.textContent.includes("error") && !errBox.textContent.includes("ERROR")) {
-    errBox.classList.remove("show");
-  }
-
-  debugLog("[initApp] DONE. Users: " + STATE.users.length + ", Uploads: " + STATE.uploads.length + ", NTI items: " + Object.keys(NTI).length);
-
   const saved = getSession();
   if (saved) {
     const found = STATE.users.find(u => u.username === saved.username);
@@ -887,11 +780,7 @@ async function initApp() {
   }
 }
 
-initApp();// ===================== LOGIN =====================
-function doLogin() {
-  const errBox = document.getElementById("loginError");
-  try {
-    const userIn = document.getElementById("loginUser").value.trim().toLowerCase();
+initApp();.value.trim().toLowerCase();
     const passIn = document.getElementById("loginPass").value;
     console.log("[doLogin] Attempting login with:", userIn);
 
