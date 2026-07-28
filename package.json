@@ -1,0 +1,17 @@
+{
+  "name": "nti-demand-summary-dashboard",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@netlify/database": "latest",
+    "drizzle-orm": "beta"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.2",
+    "drizzle-kit": "beta",
+    "typescript": "^7.0.2"
+  },
+  "scripts": {
+    "db:generate": "drizzle-kit generate"
+  }
+}
