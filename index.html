@@ -190,6 +190,8 @@ body {
 .btn-success:hover { background: #059669; }
 .btn-sm { padding: 6px 12px; font-size: 13px; }
 .btn-block { width: 100%; }
+@keyframes spin { 100% { transform: rotate(360deg); } }
+.spin { animation: spin 1s linear infinite; }
 
 /* Tables */
 .table-wrap { overflow-x: auto; }
@@ -288,6 +290,8 @@ tbody tr:last-child td { border-bottom: none; }
 
 /* Hidden */
 .hidden { display: none !important; }
+.page { display: none; }
+.page.active { display: block; }
 
 /* Responsive */
 @media (max-width: 768px) {
@@ -600,7 +604,7 @@ tbody tr:last-child td { border-bottom: none; }
 <div id="addUserModal" class="modal-overlay hidden" onclick="if(event.target===this)closeAddUserModal()">
   <div class="modal-box" style="max-width:420px;">
     <div class="modal-header">
-      <h3>Add New User</h3>
+      <h3 id="userModalTitle">Add New User</h3>
       <button class="btn btn-sm btn-secondary" onclick="closeAddUserModal()">Close</button>
     </div>
     <div class="modal-body">
@@ -623,7 +627,7 @@ tbody tr:last-child td { border-bottom: none; }
           <option value="admin">Admin (full access)</option>
         </select>
       </div>
-      <button class="btn btn-success btn-block" onclick="addUser()">Create user</button>
+      <button id="saveUserBtn" class="btn btn-success btn-block" onclick="saveUser()">Create user</button>
     </div>
   </div>
 </div>
@@ -652,14 +656,34 @@ let currentUser = null;
 let currentParsed = null;
 
 // ===================== STORAGE HELPERS =====================
-function getUsers() {
-  const raw = localStorage.getItem("nti_users_v2");
-  if (raw) return JSON.parse(raw);
-  const users = [ADMIN_DEFAULT];
-  localStorage.setItem("nti_users_v2", JSON.stringify(users));
-  return users;
+const API_URL = "https://script.google.com/macros/s/AKfycbwBpNIN7Em7a4DnOWYDlxtZOjRX54Fz5QrlRrRsMJr-XRwOVA-3AH6BW__mU_HZV9-URA/exec";
+
+let STATE = {
+  users: [ADMIN_DEFAULT],
+  uploads: [],
+  nti: { ...DEFAULT_NTI }
+};
+
+async function apiCall(action, payload = {}) {
+  const data = { action, ...payload };
+  try {
+    const response = await fetch(API_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify(data)
+    });
+    return await response.json();
+  } catch (err) {
+    console.error("API Error:", err);
+    return { error: err.message };
+  }
 }
-function saveUsers(users) { localStorage.setItem("nti_users_v2", JSON.stringify(users)); }
+
+function getUsers() { return STATE.users; }
+async function saveUsers(users) { 
+  STATE.users = users;
+  await apiCall("saveUsers", { users }); 
+}
 
 function getSession() {
   const raw = sessionStorage.getItem("nti_session_v2");
@@ -668,26 +692,62 @@ function getSession() {
 function setSession(user) { sessionStorage.setItem("nti_session_v2", JSON.stringify(user)); }
 function clearSession() { sessionStorage.removeItem("nti_session_v2"); }
 
-function loadNTI() {
-  const raw = localStorage.getItem("nti_db_v2");
-  if (raw) NTI = JSON.parse(raw);
+async function saveNTI(data) { 
+  STATE.nti = data;
+  NTI = data;
+  await apiCall("saveNTI", { nti: data }); 
 }
-function saveNTI(data) { localStorage.setItem("nti_db_v2", JSON.stringify(data)); }
 
-function getUploads() {
-  return JSON.parse(localStorage.getItem("nti_uploads_v2") || "[]").sort((a, b) => b.timestamp - a.timestamp);
+function getUploads() { return STATE.uploads; }
+async function saveUploads(uploads) { 
+  STATE.uploads = uploads;
+  await apiCall("saveUploads", { uploads }); 
 }
-function saveUploads(uploads) { localStorage.setItem("nti_uploads_v2", JSON.stringify(uploads)); }
 
 // ===================== INIT =====================
-loadNTI();
+async function initApp() {
+  const loginBtn = document.querySelector("#loginPage .btn-primary");
+  if (loginBtn) {
+    loginBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="spin" style="margin-right:8px;"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10" stroke-opacity="0.8"/></svg> Loading DB...`;
+    loginBtn.disabled = true;
+  }
+  
+  const [usersRes, uploadsRes, ntiRes] = await Promise.all([
+    apiCall("getUsers"),
+    apiCall("getUploads"),
+    apiCall("getNTI")
+  ]);
 
-const saved = getSession();
-if (saved) {
-  const users = getUsers();
-  const found = users.find(u => u.username === saved.username);
-  if (found) loginSuccess(found);
+  if (!usersRes.error && Array.isArray(usersRes) && usersRes.length > 0) {
+    STATE.users = usersRes;
+  } else {
+    await saveUsers(STATE.users); // Save defaults if empty
+  }
+
+  if (!uploadsRes.error && Array.isArray(uploadsRes)) {
+    STATE.uploads = uploadsRes.sort((a, b) => b.timestamp - a.timestamp);
+  }
+
+  if (!ntiRes.error && Object.keys(ntiRes).length > 0) {
+    STATE.nti = ntiRes;
+    NTI = ntiRes;
+  } else {
+    await saveNTI(NTI); // Save default NTI
+  }
+
+  if (loginBtn) {
+    loginBtn.textContent = "Sign in";
+    loginBtn.disabled = false;
+  }
+
+  const saved = getSession();
+  if (saved) {
+    const found = STATE.users.find(u => u.username === saved.username);
+    if (found) loginSuccess(found);
+  }
 }
+
+initApp();
 
 // ===================== LOGIN =====================
 function doLogin() {
@@ -912,11 +972,21 @@ function esc(str) {
 }
 
 // ===================== SAVE =====================
-document.getElementById("saveBtn").addEventListener("click", () => {
+document.getElementById("saveBtn").addEventListener("click", async (e) => {
   if (!currentParsed) return;
+  
+  const btn = e.currentTarget;
+  const origHtml = btn.innerHTML;
+  btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="spin"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10" stroke-opacity="0.8"/></svg> Saving...`;
+  btn.disabled = true;
+
   const uploads = getUploads();
   uploads.push(currentParsed);
-  saveUploads(uploads);
+  await saveUploads(uploads);
+
+  btn.innerHTML = origHtml;
+  btn.disabled = false;
+
   showAlert("Saved to history successfully!", "success");
   currentParsed = null;
   document.getElementById("fileName").style.display = "none";
@@ -990,11 +1060,11 @@ function viewUpload(idx) {
 
 function closeModal() { document.getElementById("viewModal").classList.add("hidden"); }
 
-function deleteUploadEntry(idx) {
+async function deleteUploadEntry(idx) {
   if (!confirm("Delete this upload from history?")) return;
   const uploads = getUploads();
   uploads.splice(idx, 1);
-  saveUploads(uploads);
+  await saveUploads(uploads);
   renderHistory();
   showAlert("Deleted from history.", "success");
 }
@@ -1081,22 +1151,41 @@ function renderUsers() {
         </div>
       </div>
       <div style="display:flex;gap:8px;">
-        ${u.username !== "talha.mahmood" ? `<button class="btn btn-sm btn-danger" onclick="deleteUser(${idx})">Delete</button>` : '<span style="font-size:12px;color:var(--text-muted);padding:6px 0;">Super Admin</span>'}
+        ${u.username !== "talha.mahmood" ? `<button class="btn btn-sm btn-secondary" onclick="editUser(${idx})">Edit</button><button class="btn btn-sm btn-danger" onclick="deleteUser(${idx})">Delete</button>` : '<span style="font-size:12px;color:var(--text-muted);padding:6px 0;">Super Admin</span>'}
       </div>
     </div>
   `).join("");
 }
 
+let editingUserIdx = -1;
+
 function showAddUserModal() {
+  editingUserIdx = -1;
   document.getElementById("addUserModal").classList.remove("hidden");
+  document.getElementById("userModalTitle").textContent = "Add New User";
   document.getElementById("newUserName").value = "";
   document.getElementById("newUserUser").value = "";
   document.getElementById("newUserPass").value = "";
   document.getElementById("newUserRole").value = "user";
+  document.getElementById("saveUserBtn").textContent = "Create user";
 }
+
+function editUser(idx) {
+  const users = getUsers();
+  const u = users[idx];
+  editingUserIdx = idx;
+  document.getElementById("addUserModal").classList.remove("hidden");
+  document.getElementById("userModalTitle").textContent = "Edit User";
+  document.getElementById("newUserName").value = u.name;
+  document.getElementById("newUserUser").value = u.username;
+  document.getElementById("newUserPass").value = u.password;
+  document.getElementById("newUserRole").value = u.role;
+  document.getElementById("saveUserBtn").textContent = "Save changes";
+}
+
 function closeAddUserModal() { document.getElementById("addUserModal").classList.add("hidden"); }
 
-function addUser() {
+async function saveUser() {
   const name = document.getElementById("newUserName").value.trim();
   const username = document.getElementById("newUserUser").value.trim().toLowerCase();
   const password = document.getElementById("newUserPass").value;
@@ -1106,21 +1195,36 @@ function addUser() {
   if (password.length < 6) { showAlert("Password must be at least 6 characters.", "error"); return; }
 
   const users = getUsers();
-  if (users.some(u => u.username === username)) { showAlert("Username already exists.", "error"); return; }
+  
+  if (editingUserIdx === -1) {
+    if (users.some(u => u.username === username)) { showAlert("Username already exists.", "error"); return; }
+    users.push({ name, username, password, role });
+    showAlert("User created successfully!", "success");
+  } else {
+    if (users.some((u, i) => u.username === username && i !== editingUserIdx)) { showAlert("Username already exists.", "error"); return; }
+    users[editingUserIdx] = { name, username, password, role };
+    showAlert("User updated successfully!", "success");
+  }
 
-  users.push({ name, username, password, role });
-  saveUsers(users);
+  const btn = document.getElementById("saveUserBtn");
+  const orig = btn.textContent;
+  btn.textContent = "Saving...";
+  btn.disabled = true;
+
+  await saveUsers(users);
+
+  btn.textContent = orig;
+  btn.disabled = false;
   closeAddUserModal();
   renderUsers();
-  showAlert("User created successfully!", "success");
 }
 
-function deleteUser(idx) {
+async function deleteUser(idx) {
   const users = getUsers();
   if (users[idx].username === "talha.mahmood") { showAlert("Cannot delete super admin.", "error"); return; }
   if (!confirm("Delete this user?")) return;
   users.splice(idx, 1);
-  saveUsers(users);
+  await saveUsers(users);
   renderUsers();
   showAlert("User deleted.", "success");
 }
@@ -1170,7 +1274,7 @@ async function handleDBFile(input) {
     }
 
     NTI = newDB;
-    saveNTI(newDB);
+    await saveNTI(newDB);
     updateDBStats();
     status.innerHTML = `<span style="color:var(--success);font-weight:600;">Success!</span> Loaded ${count} items into NTI database.`;
     showAlert("NTI database updated successfully!", "success");
