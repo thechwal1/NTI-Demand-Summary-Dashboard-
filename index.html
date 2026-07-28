@@ -665,24 +665,33 @@ let STATE = {
 };
 
 async function apiCall(action, payload = {}) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 8000); // 8 second timeout
+
   try {
     const url = API_URL + "?action=" + action;
 
     if (action.startsWith("get")) {
-      const response = await fetch(url);
+      const response = await fetch(url, { signal: controller.signal });
+      clearTimeout(timeoutId);
       if (!response.ok) throw new Error("HTTP " + response.status);
-      return await response.json();
+      const text = await response.text();
+      try { return JSON.parse(text); } catch { throw new Error("Invalid JSON: " + text.slice(0,200)); }
     } else {
-      // CRITICAL FIX: removed mode: "no-cors"
       const response = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({ action, ...payload })
+        body: JSON.stringify({ action, ...payload }),
+        signal: controller.signal
       });
+      clearTimeout(timeoutId);
       if (!response.ok) throw new Error("HTTP " + response.status);
-      return await response.json();
+      const text = await response.text();
+      try { return JSON.parse(text); } catch { throw new Error("Invalid JSON: " + text.slice(0,200)); }
     }
   } catch (err) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') return { error: 'Request timed out (8s)' };
     console.error("API Error:", err);
     return { error: err.message };
   }
