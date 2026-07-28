@@ -684,16 +684,16 @@ async function awRequest(method, path, body = null) {
   const opts = { method, headers };
   if (body) opts.body = JSON.stringify(body);
 
-  console.log('[Appwrite] >>>', method, url);
-  if (body) console.log('[Appwrite] BODY:', JSON.stringify(body).slice(0, 200));
+  debugLog('[Appwrite] >>> ' + method + ' ' + path);
+  if (body) debugLog('[Appwrite] BODY: ' + JSON.stringify(body).slice(0, 150));
 
   try {
     const res = await fetch(url, opts);
     const text = await res.text();
-    console.log('[Appwrite] <<< Status:', res.status, 'Response:', text.slice(0, 300));
+    debugLog('[Appwrite] <<< Status: ' + res.status + ' | ' + text.slice(0, 200));
     try { return JSON.parse(text); } catch { return {error: text.slice(0, 500)}; }
   } catch (networkErr) {
-    console.error('[Appwrite] NETWORK ERROR:', networkErr.message);
+    debugLog('[Appwrite] NETWORK ERROR: ' + networkErr.message);
     return {error: 'Network error: ' + networkErr.message};
   }
 }
@@ -849,8 +849,15 @@ async function initApp() {
       for (const d of ntiDocs) nti[d.itemNum] = {name: d.name, price: d.price, class: d.class};
       STATE.nti = nti;
       NTI = nti;
+      debugLog("[initApp] Loaded " + ntiDocs.length + " NTI items");
     } else {
-      await saveNTI(NTI);
+      debugLog("[initApp] Seeding NTI database (239 items)...");
+      const seedRes = await saveNTI(NTI);
+      if (seedRes.error) {
+        debugLog("[initApp] NTI SEED FAILED: " + seedRes.error);
+      } else {
+        debugLog("[initApp] NTI seeded OK");
+      }
     }
 
   } catch (err) {
@@ -865,6 +872,13 @@ async function initApp() {
     loginBtn.textContent = "Sign in";
     loginBtn.disabled = false;
   }
+
+  // Clear error message if init succeeded
+  if (errBox && !errBox.textContent.includes("error") && !errBox.textContent.includes("ERROR")) {
+    errBox.classList.remove("show");
+  }
+
+  debugLog("[initApp] DONE. Users: " + STATE.users.length + ", Uploads: " + STATE.uploads.length + ", NTI items: " + Object.keys(NTI).length);
 
   const saved = getSession();
   if (saved) {
