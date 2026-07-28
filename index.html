@@ -656,8 +656,16 @@ let currentUser = null;
 let currentParsed = null;
 
 // ===================== STORAGE HELPERS =====================
-const API_URL = "https://script.google.com/macros/s/AKfycbwBpNIN7Em7a4DnOWYDlxtZOjRX54Fz5QrlRrRsMJr-XRwOVA-3AH6BW__mU_HZV9-URA/exec";
-console.log("[NTI Portal] Frontend v2.2 loaded. API:", API_URL);
+// ===================== APPWRITE CONFIG =====================
+// REPLACE THESE 2 VALUES AFTER CREATING YOUR APPWRITE PROJECT
+const APPWRITE_ENDPOINT = 'https://cloud.appwrite.io/v1';
+const APPWRITE_PROJECT = '6a69132000319ef30d2e';
+const DATABASE_ID = '6a69143600145a8edc59';
+const COLLECTION_USERS = 'users';
+const COLLECTION_UPLOADS = 'uploads';
+const COLLECTION_NTI = 'nti';
+
+console.log("[NTI Portal] Appwrite version loaded");
 
 let STATE = {
   users: [ADMIN_DEFAULT],
@@ -665,45 +673,95 @@ let STATE = {
   nti: { ...DEFAULT_NTI }
 };
 
-async function fetchWithTimeout(url, options, ms) {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error("Timeout after " + ms + "ms")), ms);
-    fetch(url, options).then(async response => {
-      clearTimeout(timer);
-      const text = await response.text();
-      try { resolve(JSON.parse(text)); } 
-      catch(e) { resolve({error: "Invalid JSON: " + text.slice(0,200)}); }
-    }).catch(err => {
-      clearTimeout(timer);
-      reject(err);
-    });
-  });
+// ===================== APPWRITE HELPERS =====================
+async function awRequest(method, path, body = null) {
+  const url = APPWRITE_ENDPOINT + path;
+  const headers = {
+    'Content-Type': 'application/json',
+    'X-Appwrite-Project': APPWRITE_PROJECT
+  };
+  const opts = { method, headers };
+  if (body) opts.body = JSON.stringify(body);
+
+  const res = await fetch(url, opts);
+  const text = await res.text();
+  try { return JSON.parse(text); } catch { return {error: text.slice(0, 500)}; }
 }
 
-async function apiCall(action, payload = {}) {
-  try {
-    const url = API_URL + "?action=" + action;
-    if (action.startsWith("get")) {
-      return await fetchWithTimeout(url, {}, 8000);
-    } else {
-      return await fetchWithTimeout(url, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain;charset=utf-8" },
-        body: JSON.stringify({ action, ...payload })
-      }, 8000);
-    }
-  } catch (err) {
-    console.error("API Error:", err);
-    return { error: err.message || String(err) };
+async function awListAll(collectionId) {
+  const all = [];
+  let offset = 0;
+  const limit = 100;
+  while (true) {
+    const res = await awRequest('GET', `/databases/${DATABASE_ID}/collections/${collectionId}/documents?limit=${limit}&offset=${offset}`);
+    if (res.error) { console.error('[Appwrite] list error:', res.error); break; }
+    if (!res.documents) break;
+    all.push(...res.documents);
+    if (res.documents.length < limit) break;
+    offset += limit;
   }
+  return all;
 }
 
+async function awCreate(collectionId, data, docId = 'unique()') {
+  return awRequest('POST', `/databases/${DATABASE_ID}/collections/${collectionId}/documents?documentId=${docId}`, data);
+}
+
+async function awDelete(collectionId, docId) {
+  return awRequest('DELETE', `/databases/${DATABASE_ID}/collections/${collectionId}/documents/${docId}`);
+}
+
+// ===================== DATA LAYER =====================
 function getUsers() { return STATE.users; }
-async function saveUsers(users) { 
+
+async function saveUsers(users) {
   STATE.users = users;
-  const res = await apiCall("saveUsers", { users });
-  if (res.error) throw new Error(res.error);
-  return res;
+  const existing = await awListAll(COLLECTION_USERS);
+  for (const doc of existing) await awDelete(COLLECTION_USERS, doc.$id);
+  for (const u of users) {
+    const res = await awCreate(COLLECTION_USERS, u);
+    if (res.error) throw new Error(res.error);
+  }
+  return {success: true};
+}
+
+function getUploads() { return STATE.uploads; }
+
+async function saveUploads(uploads) {
+  STATE.uploads = uploads;
+  const existing = await awListAll(COLLECTION_UPLOADS);
+  for (const doc of existing) await awDelete(COLLECTION_UPLOADS, doc.$id);
+  for (const u of uploads) {
+    const payload = {
+      storeId: u.storeId,
+      storeName: u.storeName,
+      filename: u.filename,
+      label: u.label || '',
+      uploadedBy: u.uploadedBy || '',
+      totalItems: u.totalItems,
+      totalValue: u.totalValue,
+      uniqueSKUs: u.uniqueSKUs,
+      matched: u.matched,
+      resultsJSON: JSON.stringify(u.results || []),
+      notFoundJSON: JSON.stringify(u.notFound || []),
+      timestamp: u.timestamp
+    };
+    const res = await awCreate(COLLECTION_UPLOADS, payload);
+    if (res.error) throw new Error(res.error);
+  }
+  return {success: true};
+}
+
+async function saveNTI(data) {
+  STATE.nti = data;
+  NTI = data;
+  const existing = await awListAll(COLLECTION_NTI);
+  for (const doc of existing) await awDelete(COLLECTION_NTI, doc.$id);
+  for (const [itemNum, info] of Object.entries(data)) {
+    const res = await awCreate(COLLECTION_NTI, { itemNum, name: info.name, price: info.price, class: info.class });
+    if (res.error) throw new Error(res.error);
+  }
+  return {success: true};
 }
 
 function getSession() {
@@ -713,51 +771,77 @@ function getSession() {
 function setSession(user) { sessionStorage.setItem("nti_session_v2", JSON.stringify(user)); }
 function clearSession() { sessionStorage.removeItem("nti_session_v2"); }
 
-async function saveNTI(data) { 
-  STATE.nti = data;
-  NTI = data;
-  const res = await apiCall("saveNTI", { nti: data });
-  if (res.error) throw new Error(res.error);
-  return res;
-}
-
-function getUploads() { return STATE.uploads; }
-async function saveUploads(uploads) { 
-  STATE.uploads = uploads;
-  const res = await apiCall("saveUploads", { uploads });
-  if (res.error) throw new Error(res.error);
-  return res;
-}
-
 // ===================== INIT =====================
 async function initApp() {
   const loginBtn = document.querySelector("#loginPage .btn-primary");
+  const errBox = document.getElementById("loginError");
+
   if (loginBtn) {
-    loginBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="spin" style="margin-right:8px;"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10" stroke-opacity="0.8"/></svg> Loading DB...`;
+    loginBtn.innerHTML = `Loading DB...`;
     loginBtn.disabled = true;
   }
-  
-  const [usersRes, uploadsRes, ntiRes] = await Promise.all([
-    apiCall("getUsers"),
-    apiCall("getUploads"),
-    apiCall("getNTI")
-  ]);
 
-  if (!usersRes.error && Array.isArray(usersRes) && usersRes.length > 0) {
-    STATE.users = usersRes;
-  } else {
-    await saveUsers(STATE.users); // Save defaults if empty
-  }
+  // Safety fallback: force-enable button after 10s
+  setTimeout(() => {
+    if (loginBtn && loginBtn.disabled) {
+      loginBtn.textContent = "Sign in";
+      loginBtn.disabled = false;
+      if (errBox) {
+        errBox.textContent = "Appwrite slow. Use default login: talha.mahmood / Faster@123";
+        errBox.classList.add("show");
+      }
+    }
+  }, 10000);
 
-  if (!uploadsRes.error && Array.isArray(uploadsRes)) {
-    STATE.uploads = uploadsRes.sort((a, b) => b.timestamp - a.timestamp);
-  }
+  try {
+    console.log("[initApp] Loading from Appwrite...");
 
-  if (!ntiRes.error && Object.keys(ntiRes).length > 0) {
-    STATE.nti = ntiRes;
-    NTI = ntiRes;
-  } else {
-    await saveNTI(NTI); // Save default NTI
+    // Load users
+    const userDocs = await awListAll(COLLECTION_USERS);
+    console.log("[initApp] userDocs:", userDocs.length);
+    if (userDocs.length > 0) {
+      STATE.users = userDocs.map(d => ({name: d.name, username: d.username, password: d.password, role: d.role}));
+    } else {
+      console.log("[initApp] Seeding default admin...");
+      await saveUsers(STATE.users);
+    }
+
+    // Load uploads
+    const uploadDocs = await awListAll(COLLECTION_UPLOADS);
+    console.log("[initApp] uploadDocs:", uploadDocs.length);
+    STATE.uploads = uploadDocs.map(d => ({
+      timestamp: d.timestamp,
+      storeId: d.storeId,
+      storeName: d.storeName,
+      filename: d.filename,
+      label: d.label,
+      uploadedBy: d.uploadedBy,
+      totalItems: d.totalItems,
+      totalValue: d.totalValue,
+      uniqueSKUs: d.uniqueSKUs,
+      matched: d.matched,
+      results: JSON.parse(d.resultsJSON || '[]'),
+      notFound: JSON.parse(d.notFoundJSON || '[]')
+    })).sort((a, b) => b.timestamp - a.timestamp);
+
+    // Load NTI
+    const ntiDocs = await awListAll(COLLECTION_NTI);
+    console.log("[initApp] ntiDocs:", ntiDocs.length);
+    if (ntiDocs.length > 0) {
+      const nti = {};
+      for (const d of ntiDocs) nti[d.itemNum] = {name: d.name, price: d.price, class: d.class};
+      STATE.nti = nti;
+      NTI = nti;
+    } else {
+      await saveNTI(NTI);
+    }
+
+  } catch (err) {
+    console.error("[initApp] Error:", err);
+    if (errBox) {
+      errBox.textContent = "Appwrite error: " + err.message + ". Check console.";
+      errBox.classList.add("show");
+    }
   }
 
   if (loginBtn) {
@@ -772,9 +856,7 @@ async function initApp() {
   }
 }
 
-initApp();
-
-// ===================== LOGIN =====================
+initApp();// ===================== LOGIN =====================
 function doLogin() {
   const errBox = document.getElementById("loginError");
   try {
