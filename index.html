@@ -618,7 +618,7 @@ tbody tr:last-child td { border-bottom: none; }
       </div>
       <div class="form-group">
         <label class="form-label">Password</label>
-        <input type="text" id="newUserPass" class="form-control" placeholder="Min 6 characters">
+        <input type="password" id="newUserPass" class="form-control" placeholder="Min 6 characters" autocomplete="new-password">
       </div>
       <div class="form-group">
         <label class="form-label">Role</label>
@@ -649,75 +649,129 @@ const STORE_NAMES = {
   "S4021MBH2": "Jail Road Mandi Bahauddin-02 Store"
 };
 
-const ADMIN_DEFAULT = { username: "talha.mahmood", password: "Faster@123", name: "Talha Mahmood", role: "admin" };
-
 // ===================== STATE =====================
 let currentUser = null;
 let currentParsed = null;
 
-// ===================== STORAGE HELPERS =====================
-// ===================== LOCAL STORAGE CONFIG =====================
+// ===================== LEGACY STORAGE KEYS =====================
 const LS_KEY_USERS = 'nti_users';
 const LS_KEY_UPLOADS = 'nti_uploads';
 const LS_KEY_NTI = 'nti_database';
+const LS_KEY_MIGRATED = 'nti_netlify_migrated';
+const SESSION_KEY = 'nti_session_v3';
 
 let STATE = {
-  users: [ADMIN_DEFAULT],
+  users: [],
   uploads: [],
   nti: { ...DEFAULT_NTI }
 };
 
-// ===================== LOCAL STORAGE HELPERS =====================
-function lsGet(key, fallback) {
+// ===================== DATA LAYER =====================
+function legacyGet(key, fallback) {
   try {
     const raw = localStorage.getItem(key);
     return raw ? JSON.parse(raw) : fallback;
-  } catch (e) {
-    console.error('localStorage read error:', e);
+  } catch {
     return fallback;
   }
 }
 
-function lsSet(key, value) {
+function getSession() {
   try {
-    localStorage.setItem(key, JSON.stringify(value));
-    return true;
-  } catch (e) {
-    console.error('localStorage write error:', e);
-    return false;
+    const raw = sessionStorage.getItem(SESSION_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
   }
 }
 
-// ===================== DATA LAYER =====================
-function getUsers() { return STATE.users; }
+function setSession(session) { sessionStorage.setItem(SESSION_KEY, JSON.stringify(session)); }
+function clearSession() { sessionStorage.removeItem(SESSION_KEY); }
 
-async function saveUsers(users) {
-  STATE.users = users;
-  lsSet(LS_KEY_USERS, users);
-  return {success: true};
+async function apiRequest(path, options = {}) {
+  const session = getSession();
+  const headers = { ...(options.headers || {}) };
+  if (options.body) headers["Content-Type"] = "application/json";
+  if (session?.token) headers.Authorization = `Bearer ${session.token}`;
+
+  const response = await fetch(`/api/${path}`, { ...options, headers });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    if (response.status === 401) clearSession();
+    throw new Error(data.error || "Request failed.");
+  }
+  return data;
 }
 
+function getUsers() { return STATE.users; }
 function getUploads() { return STATE.uploads; }
 
-async function saveUploads(uploads) {
-  STATE.uploads = uploads;
-  lsSet(LS_KEY_UPLOADS, uploads);
-  return {success: true};
+async function loadRemoteState() {
+  const data = await apiRequest("data");
+  currentUser = data.user;
+  STATE.users = Array.isArray(data.users) ? data.users : [];
+  STATE.uploads = Array.isArray(data.uploads) ? data.uploads : [];
+  STATE.nti = data.nti && Object.keys(data.nti).length ? data.nti : {};
+  NTI = STATE.nti;
+  return data;
 }
 
 async function saveNTI(data) {
+  await apiRequest("nti", { method: "PUT", body: JSON.stringify(data) });
   STATE.nti = data;
   NTI = data;
-  lsSet(LS_KEY_NTI, data);
   return {success: true};
 }
 
-function getSession() {
-  const raw = sessionStorage.getItem("nti_session_v2");
-  return raw ? JSON.parse(raw) : null;
+async function migrateLegacyData() {
+  if (currentUser?.role !== "admin" || localStorage.getItem(LS_KEY_MIGRATED)) return false;
+
+  const oldUsers = legacyGet(LS_KEY_USERS, []);
+  const oldUploads = legacyGet(LS_KEY_UPLOADS, []);
+  const oldNti = legacyGet(LS_KEY_NTI, null);
+  let changed = false;
+
+  if (STATE.users.length <= 1 && Array.isArray(oldUsers)) {
+    for (const user of oldUsers) {
+      if (!user || user.username === "talha.mahmood" || !user.password) continue;
+      try {
+        await apiRequest("users", { method: "POST", body: JSON.stringify(user) });
+        changed = true;
+      } catch (error) {
+        console.warn("Legacy user import skipped:", error.message);
+      }
+    }
+  }
+
+  if (STATE.uploads.length === 0 && Array.isArray(oldUploads)) {
+    for (const upload of oldUploads) {
+      try {
+        await apiRequest("uploads", { method: "POST", body: JSON.stringify(upload) });
+        changed = true;
+      } catch (error) {
+        console.warn("Legacy upload import skipped:", error.message);
+      }
+    }
+  }
+
+  if (Object.keys(STATE.nti).length === 0 && oldNti && Object.keys(oldNti).length) {
+    await saveNTI(oldNti);
+    changed = true;
+  }
+
+  localStorage.setItem(LS_KEY_MIGRATED, "true");
+  return changed;
 }
-function setSession(user) { sessionStorage.setItem("nti_session_v2", JSON.stringify(user)); }
-function clearSession() { sessionStorage.removeItem("nti_session_v2"); }
+
+async function prepareAuthenticatedApp() {
+  await loadRemoteState();
+  const migrated = await migrateLegacyData();
+  if (migrated) await loadRemoteState();
+  if (currentUser?.role === "admin" && Object.keys(NTI).length === 0) {
+    await saveNTI(DEFAULT_NTI);
+  }
+  if (Object.keys(NTI).length === 0) NTI = { ...DEFAULT_NTI };
+}
 
 // ===================== INIT =====================
 async function initApp() {
@@ -730,40 +784,16 @@ async function initApp() {
   }
 
   try {
-    console.log("[initApp] Loading from localStorage...");
-
-    // Load users
-    const savedUsers = lsGet(LS_KEY_USERS, null);
-    if (savedUsers && Array.isArray(savedUsers) && savedUsers.length > 0) {
-      STATE.users = savedUsers;
-      console.log("[initApp] Loaded", savedUsers.length, "users from localStorage");
-    } else {
-      console.log("[initApp] Seeding default admin...");
-      lsSet(LS_KEY_USERS, STATE.users);
+    const saved = getSession();
+    if (saved?.token) {
+      await prepareAuthenticatedApp();
+      loginSuccess(currentUser);
     }
-
-    // Load uploads
-    const savedUploads = lsGet(LS_KEY_UPLOADS, null);
-    if (savedUploads && Array.isArray(savedUploads)) {
-      STATE.uploads = savedUploads.sort((a, b) => b.timestamp - a.timestamp);
-      console.log("[initApp] Loaded", savedUploads.length, "uploads from localStorage");
-    }
-
-    // Load NTI
-    const savedNTI = lsGet(LS_KEY_NTI, null);
-    if (savedNTI && Object.keys(savedNTI).length > 0) {
-      STATE.nti = savedNTI;
-      NTI = savedNTI;
-      console.log("[initApp] Loaded", Object.keys(savedNTI).length, "NTI items from localStorage");
-    } else {
-      console.log("[initApp] Seeding default NTI database...");
-      lsSet(LS_KEY_NTI, NTI);
-    }
-
   } catch (err) {
     console.error("[initApp] Error:", err);
+    clearSession();
     if (errBox) {
-      errBox.textContent = "Load error. Please refresh.";
+      errBox.textContent = "Please sign in again.";
       errBox.classList.add("show");
     }
   }
@@ -772,46 +802,40 @@ async function initApp() {
     loginBtn.textContent = "Sign in";
     loginBtn.disabled = false;
   }
-
-  const saved = getSession();
-  if (saved) {
-    const found = STATE.users.find(u => u.username === saved.username);
-    if (found) loginSuccess(found);
-  }
 }
 
 initApp();
 
 // ===================== LOGIN =====================
-function doLogin() {
+async function doLogin() {
   const errBox = document.getElementById("loginError");
+  const loginBtn = document.querySelector("#loginPage .btn-primary");
   try {
     const userIn = document.getElementById("loginUser").value.trim().toLowerCase();
     const passIn = document.getElementById("loginPass").value;
-    console.log("[doLogin] Attempting login with:", userIn);
 
     if (!userIn || !passIn) {
       errBox.textContent = "Please enter both username and password.";
       errBox.classList.add("show");
       return;
     }
-    const users = getUsers();
-    console.log("[doLogin] Users in state:", users.map(u => u.username));
-    const found = users.find(u => u.username === userIn && u.password === passIn);
-    if (found) {
-      errBox.classList.remove("show");
-      setSession(found);
-      loginSuccess(found);
-      console.log("[doLogin] Login success:", found.username);
-    } else {
-      errBox.textContent = "Invalid username or password.";
-      errBox.classList.add("show");
-      console.log("[doLogin] Login failed for:", userIn);
-    }
+    loginBtn.textContent = "Signing in...";
+    loginBtn.disabled = true;
+    const session = await apiRequest("login", {
+      method: "POST",
+      body: JSON.stringify({ username: userIn, password: passIn })
+    });
+    setSession(session);
+    await prepareAuthenticatedApp();
+    errBox.classList.remove("show");
+    loginSuccess(currentUser);
   } catch (err) {
-    console.error("[doLogin] CRASH:", err);
-    errBox.textContent = "Login error: " + err.message;
+    clearSession();
+    errBox.textContent = err.message;
     errBox.classList.add("show");
+  } finally {
+    loginBtn.textContent = "Sign in";
+    loginBtn.disabled = false;
   }
 }
 
@@ -838,6 +862,7 @@ function loginSuccess(user) {
 }
 
 function doLogout() {
+  apiRequest("logout", { method: "POST" }).catch(() => {});
   clearSession();
   currentUser = null;
   document.getElementById("app").classList.add("hidden");
@@ -1024,9 +1049,15 @@ document.getElementById("saveBtn").addEventListener("click", async (e) => {
   btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="spin"><circle cx="12" cy="12" r="10" stroke-opacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10" stroke-opacity="0.8"/></svg> Saving...`;
   btn.disabled = true;
 
-  const uploads = getUploads();
-  uploads.push(currentParsed);
-  await saveUploads(uploads);
+  try {
+    const saved = await apiRequest("uploads", { method: "POST", body: JSON.stringify(currentParsed) });
+    STATE.uploads.unshift(saved);
+  } catch (error) {
+    btn.innerHTML = origHtml;
+    btn.disabled = false;
+    showAlert(error.message, "error");
+    return;
+  }
 
   btn.innerHTML = origHtml;
   btn.disabled = false;
@@ -1107,8 +1138,15 @@ function closeModal() { document.getElementById("viewModal").classList.add("hidd
 async function deleteUploadEntry(idx) {
   if (!confirm("Delete this upload from history?")) return;
   const uploads = getUploads();
-  uploads.splice(idx, 1);
-  await saveUploads(uploads);
+  const upload = uploads[idx];
+  if (!upload?.id) return;
+  try {
+    await apiRequest(`uploads/${upload.id}`, { method: "DELETE" });
+    uploads.splice(idx, 1);
+  } catch (error) {
+    showAlert(error.message, "error");
+    return;
+  }
   renderHistory();
   showAlert("Deleted from history.", "success");
 }
@@ -1210,6 +1248,7 @@ function showAddUserModal() {
   document.getElementById("newUserName").value = "";
   document.getElementById("newUserUser").value = "";
   document.getElementById("newUserPass").value = "";
+  document.getElementById("newUserPass").placeholder = "Min 6 characters";
   document.getElementById("newUserRole").value = "user";
   document.getElementById("saveUserBtn").textContent = "Create user";
 }
@@ -1222,7 +1261,8 @@ function editUser(idx) {
   document.getElementById("userModalTitle").textContent = "Edit User";
   document.getElementById("newUserName").value = u.name;
   document.getElementById("newUserUser").value = u.username;
-  document.getElementById("newUserPass").value = u.password;
+  document.getElementById("newUserPass").value = "";
+  document.getElementById("newUserPass").placeholder = "Leave blank to keep current password";
   document.getElementById("newUserRole").value = u.role;
   document.getElementById("saveUserBtn").textContent = "Save changes";
 }
@@ -1235,27 +1275,35 @@ async function saveUser() {
   const password = document.getElementById("newUserPass").value;
   const role = document.getElementById("newUserRole").value;
 
-  if (!name || !username || !password) { showAlert("Please fill all fields.", "error"); return; }
-  if (password.length < 6) { showAlert("Password must be at least 6 characters.", "error"); return; }
+  if (!name || !username || (editingUserIdx === -1 && !password)) { showAlert("Please fill all required fields.", "error"); return; }
+  if (password && password.length < 6) { showAlert("Password must be at least 6 characters.", "error"); return; }
 
   const users = getUsers();
   
-  if (editingUserIdx === -1) {
-    if (users.some(u => u.username === username)) { showAlert("Username already exists.", "error"); return; }
-    users.push({ name, username, password, role });
-    showAlert("User created successfully!", "success");
-  } else {
-    if (users.some((u, i) => u.username === username && i !== editingUserIdx)) { showAlert("Username already exists.", "error"); return; }
-    users[editingUserIdx] = { name, username, password, role };
-    showAlert("User updated successfully!", "success");
-  }
+  if (users.some((u, i) => u.username === username && i !== editingUserIdx)) { showAlert("Username already exists.", "error"); return; }
 
   const btn = document.getElementById("saveUserBtn");
   const orig = btn.textContent;
   btn.textContent = "Saving...";
   btn.disabled = true;
 
-  await saveUsers(users);
+  try {
+    if (editingUserIdx === -1) {
+      const saved = await apiRequest("users", { method: "POST", body: JSON.stringify({ name, username, password, role }) });
+      users.push(saved);
+      showAlert("User created successfully!", "success");
+    } else {
+      const existing = users[editingUserIdx];
+      const saved = await apiRequest(`users/${existing.id}`, { method: "PUT", body: JSON.stringify({ name, username, password, role }) });
+      users[editingUserIdx] = saved;
+      showAlert("User updated successfully!", "success");
+    }
+  } catch (error) {
+    showAlert(error.message, "error");
+    btn.textContent = orig;
+    btn.disabled = false;
+    return;
+  }
 
   btn.textContent = orig;
   btn.disabled = false;
@@ -1267,8 +1315,13 @@ async function deleteUser(idx) {
   const users = getUsers();
   if (users[idx].username === "talha.mahmood") { showAlert("Cannot delete super admin.", "error"); return; }
   if (!confirm("Delete this user?")) return;
-  users.splice(idx, 1);
-  await saveUsers(users);
+  try {
+    await apiRequest(`users/${users[idx].id}`, { method: "DELETE" });
+    users.splice(idx, 1);
+  } catch (error) {
+    showAlert(error.message, "error");
+    return;
+  }
   renderUsers();
   showAlert("User deleted.", "success");
 }
