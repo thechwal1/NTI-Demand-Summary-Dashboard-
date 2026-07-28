@@ -666,7 +666,7 @@ let STATE = {
 
 async function apiCall(action, payload = {}) {
   try {
-    const url = https://script.google.com/macros/s/AKfycbwBpNIN7Em7a4DnOWYDlxtZOjRX54Fz5QrlRrRsMJr-XRwOVA-3AH6BW__mU_HZV9-URA/exec + "?action=" + action;
+    const url = API_URL + "?action=" + action;
 
     if (action.startsWith("get")) {
       const response = await fetch(url);
@@ -760,22 +760,33 @@ initApp();
 
 // ===================== LOGIN =====================
 function doLogin() {
-  const userIn = document.getElementById("loginUser").value.trim().toLowerCase();
-  const passIn = document.getElementById("loginPass").value;
   const errBox = document.getElementById("loginError");
-  if (!userIn || !passIn) {
-    errBox.textContent = "Please enter both username and password.";
-    errBox.classList.add("show");
-    return;
-  }
-  const users = getUsers();
-  const found = users.find(u => u.username === userIn && u.password === passIn);
-  if (found) {
-    errBox.classList.remove("show");
-    setSession(found);
-    loginSuccess(found);
-  } else {
-    errBox.textContent = `Invalid username or password. (Tried username: '${userIn}', DB contains: ${users.map(u => u.username).join(', ')})`;
+  try {
+    const userIn = document.getElementById("loginUser").value.trim().toLowerCase();
+    const passIn = document.getElementById("loginPass").value;
+    console.log("[doLogin] Attempting login with:", userIn);
+
+    if (!userIn || !passIn) {
+      errBox.textContent = "Please enter both username and password.";
+      errBox.classList.add("show");
+      return;
+    }
+    const users = getUsers();
+    console.log("[doLogin] Users in state:", users.map(u => u.username));
+    const found = users.find(u => u.username === userIn && u.password === passIn);
+    if (found) {
+      errBox.classList.remove("show");
+      setSession(found);
+      loginSuccess(found);
+      console.log("[doLogin] Login success:", found.username);
+    } else {
+      errBox.textContent = `Invalid username or password. (Tried: '${userIn}', Available: ${users.map(u => u.username).join(', ')})`;
+      errBox.classList.add("show");
+      console.log("[doLogin] Login failed for:", userIn);
+    }
+  } catch (err) {
+    console.error("[doLogin] CRASH:", err);
+    errBox.textContent = "Login error: " + err.message;
     errBox.classList.add("show");
   }
 }
