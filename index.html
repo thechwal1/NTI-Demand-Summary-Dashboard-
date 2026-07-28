@@ -327,6 +327,7 @@ tbody tr:last-child td { border-bottom: none; }
         <input type="password" id="loginPass" class="form-control" placeholder="Enter password" autocomplete="current-password">
       </div>
       <div id="loginError" class="alert alert-error" style="margin-bottom:12px;"></div>
+      <div id="debugPanel" style="font-size:11px;color:#6b7280;margin-bottom:12px;max-height:120px;overflow:auto;background:#f3f4f6;padding:8px;border-radius:6px;font-family:monospace;"></div>
       <button class="btn btn-primary btn-block" onclick="doLogin()">Sign in</button>
     </div>
   </div>
@@ -658,7 +659,7 @@ let currentParsed = null;
 // ===================== STORAGE HELPERS =====================
 // ===================== APPWRITE CONFIG =====================
 // REPLACE THESE 2 VALUES AFTER CREATING YOUR APPWRITE PROJECT
-const APPWRITE_ENDPOINT = 'https://cloud.appwrite.io/v1';
+const APPWRITE_ENDPOINT = 'https://sapphirenti.appwrite.network/v1';
 const APPWRITE_PROJECT = '6a69132000319ef30d2e';
 const DATABASE_ID = '6a69143600145a8edc59';
 const COLLECTION_USERS = 'users';
@@ -683,9 +684,18 @@ async function awRequest(method, path, body = null) {
   const opts = { method, headers };
   if (body) opts.body = JSON.stringify(body);
 
-  const res = await fetch(url, opts);
-  const text = await res.text();
-  try { return JSON.parse(text); } catch { return {error: text.slice(0, 500)}; }
+  console.log('[Appwrite] >>>', method, url);
+  if (body) console.log('[Appwrite] BODY:', JSON.stringify(body).slice(0, 200));
+
+  try {
+    const res = await fetch(url, opts);
+    const text = await res.text();
+    console.log('[Appwrite] <<< Status:', res.status, 'Response:', text.slice(0, 300));
+    try { return JSON.parse(text); } catch { return {error: text.slice(0, 500)}; }
+  } catch (networkErr) {
+    console.error('[Appwrite] NETWORK ERROR:', networkErr.message);
+    return {error: 'Network error: ' + networkErr.message};
+  }
 }
 
 async function awListAll(collectionId) {
@@ -772,9 +782,16 @@ function setSession(user) { sessionStorage.setItem("nti_session_v2", JSON.string
 function clearSession() { sessionStorage.removeItem("nti_session_v2"); }
 
 // ===================== INIT =====================
+function debugLog(msg) {
+  console.log(msg);
+  const panel = document.getElementById("debugPanel");
+  if (panel) panel.innerHTML += msg + "<br>";
+}
+
 async function initApp() {
   const loginBtn = document.querySelector("#loginPage .btn-primary");
   const errBox = document.getElementById("loginError");
+  debugLog("[initApp] Starting...");
 
   if (loginBtn) {
     loginBtn.innerHTML = `Loading DB...`;
@@ -787,28 +804,28 @@ async function initApp() {
       loginBtn.textContent = "Sign in";
       loginBtn.disabled = false;
       if (errBox) {
-        errBox.textContent = "Appwrite slow. Use default login: talha.mahmood / Faster@123";
+        errBox.textContent = "Server not responding. Please try again in a moment.";
         errBox.classList.add("show");
       }
     }
   }, 10000);
 
   try {
-    console.log("[initApp] Loading from Appwrite...");
+    debugLog("[initApp] Loading from Appwrite...");
 
     // Load users
     const userDocs = await awListAll(COLLECTION_USERS);
-    console.log("[initApp] userDocs:", userDocs.length);
+    debugLog("[initApp] userDocs: " + userDocs.length);
     if (userDocs.length > 0) {
       STATE.users = userDocs.map(d => ({name: d.name, username: d.username, password: d.password, role: d.role}));
     } else {
-      console.log("[initApp] Seeding default admin...");
+      debugLog("[initApp] Seeding default admin...");
       await saveUsers(STATE.users);
     }
 
     // Load uploads
     const uploadDocs = await awListAll(COLLECTION_UPLOADS);
-    console.log("[initApp] uploadDocs:", uploadDocs.length);
+    debugLog("[initApp] uploadDocs: " + uploadDocs.length);
     STATE.uploads = uploadDocs.map(d => ({
       timestamp: d.timestamp,
       storeId: d.storeId,
@@ -826,7 +843,7 @@ async function initApp() {
 
     // Load NTI
     const ntiDocs = await awListAll(COLLECTION_NTI);
-    console.log("[initApp] ntiDocs:", ntiDocs.length);
+    debugLog("[initApp] ntiDocs: " + ntiDocs.length);
     if (ntiDocs.length > 0) {
       const nti = {};
       for (const d of ntiDocs) nti[d.itemNum] = {name: d.name, price: d.price, class: d.class};
@@ -837,9 +854,9 @@ async function initApp() {
     }
 
   } catch (err) {
-    console.error("[initApp] Error:", err);
+    debugLog("[initApp] ERROR: " + err.message); console.error(err);
     if (errBox) {
-      errBox.textContent = "Appwrite error: " + err.message + ". Check console.";
+      errBox.textContent = "Connection error. Please refresh and try again.";
       errBox.classList.add("show");
     }
   }
@@ -878,7 +895,7 @@ function doLogin() {
       loginSuccess(found);
       console.log("[doLogin] Login success:", found.username);
     } else {
-      errBox.textContent = `Invalid username or password. (Tried: '${userIn}', Available: ${users.map(u => u.username).join(', ')})`;
+      errBox.textContent = "Invalid username or password.";
       errBox.classList.add("show");
       console.log("[doLogin] Login failed for:", userIn);
     }
