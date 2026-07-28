@@ -780,7 +780,13 @@ async function initApp() {
   }
 }
 
-initApp();.value.trim().toLowerCase();
+initApp();
+
+// ===================== LOGIN =====================
+function doLogin() {
+  const errBox = document.getElementById("loginError");
+  try {
+    const userIn = document.getElementById("loginUser").value.trim().toLowerCase();
     const passIn = document.getElementById("loginPass").value;
     console.log("[doLogin] Attempting login with:", userIn);
 
